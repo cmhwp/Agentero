@@ -4,6 +4,7 @@ import {
 	ChevronRight,
 	ExternalLink,
 	Library,
+	Loader2,
 	Pencil,
 	Tag,
 	Users,
@@ -18,7 +19,7 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { SiArxiv, SiModelscope } from "react-icons/si";
+import { SiArxiv, SiModelscope, SiZhihu } from "react-icons/si";
 import { EditablePaperTag } from "@/components/library/editable-paper-tag";
 import { PaperTagRemoveButton } from "@/components/library/paper-tag-chip";
 import { TagColorPalette } from "@/components/library/tag-color-palette";
@@ -35,6 +36,9 @@ import {
 	PopoverTrigger,
 } from "@/components/ui/popover";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
+import { errorText } from "@/lib/core/error";
+import { notifyError } from "@/lib/core/notify";
+import { openExternalUrl } from "@/lib/core/open-external";
 import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { cn } from "@/lib/core/utils";
 import type { PaperMetadata } from "@/lib/paper";
@@ -52,6 +56,7 @@ import {
 import { type TagColorId, tagSwatchStyle } from "@/lib/ui/tag-colors";
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
 import { getVaultPath } from "@/lib/vault/store";
+import { buildZhihuQuestionDraft, ZHIHU_HOME_URL } from "@/lib/zhihu";
 
 type PaperInfoPanelProps = {
 	meta: PaperMetadata | null;
@@ -386,6 +391,8 @@ export function PaperInfoPanel({
 	const [contentHeight, setContentHeight] = useState(loadStoredHeight);
 	/** Disable height transition while the user is dragging the resize handle. */
 	const [isDragging, setIsDragging] = useState(false);
+	/** Building the Zhihu question draft (Host round trip + optional translation). */
+	const [zhihuBusy, setZhihuBusy] = useState(false);
 	const dragRef = useRef<{
 		startY: number;
 		startHeight: number;
@@ -477,6 +484,39 @@ export function PaperInfoPanel({
 				id: "paper-info-copied",
 			},
 		});
+	};
+
+	/**
+	 * "去知乎提问": build a question draft from the current paper (title
+	 * translated via Zhida when a secret is set), copy it, then open Zhihu. A
+	 * desktop app cannot fill Zhihu's ask modal, so the draft lands on the
+	 * clipboard for the user to paste.
+	 */
+	const askOnZhihu = async () => {
+		if (!meta || zhihuBusy) return;
+		setZhihuBusy(true);
+		try {
+			const draft = await buildZhihuQuestionDraft({
+				title: meta.title ?? "",
+				authors: meta.authors ?? [],
+				venue: meta.publication ?? "",
+				year: meta.year != null ? String(meta.year) : "",
+				doi: meta.doi ?? "",
+				arxivId: meta.arxiv_id ?? "",
+				url: meta.html_url ?? meta.source_url ?? "",
+				abstractText: meta.abstract ?? "",
+			});
+			await copyTextToClipboard(`${draft.title}\n\n${draft.body}`, {
+				successMessage: t("paperInfo.zhihuAskCopied"),
+				errorMessage: t("paperInfo.copyFailed"),
+				successNotify: { duration: 5000, id: "zhihu-ask-copied" },
+			});
+			openExternalUrl(ZHIHU_HOME_URL);
+		} catch (e) {
+			notifyError(errorText(e));
+		} finally {
+			setZhihuBusy(false);
+		}
 	};
 
 	return (
@@ -663,13 +703,40 @@ export function PaperInfoPanel({
 									) : null}
 								</div>
 							) : null}
-							{canEditMeta ? (
-								<div className="px-3 pt-2">
+							<div className="flex gap-1.5 px-3 pt-2">
+								<button
+									type="button"
+									onClick={() => void askOnZhihu()}
+									disabled={zhihuBusy}
+									title={t("paperInfo.zhihuAskHint")}
+									aria-label={t("paperInfo.zhihuAsk")}
+									className={cn(
+										"flex h-7 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border bg-background px-2",
+										"text-xs leading-none text-muted-foreground transition-colors",
+										"hover:bg-muted hover:text-foreground",
+										"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+										"disabled:pointer-events-none disabled:opacity-60",
+									)}
+								>
+									{zhihuBusy ? (
+										<Loader2
+											className="size-3.5 shrink-0 animate-spin"
+											aria-hidden
+										/>
+									) : (
+										<SiZhihu
+											className="size-3.5 shrink-0 text-[#0084FF]"
+											aria-hidden
+										/>
+									)}
+									<span className="truncate">{t("paperInfo.zhihuAsk")}</span>
+								</button>
+								{canEditMeta ? (
 									<button
 										type="button"
 										onClick={() => setEditMetaDraft(meta)}
 										className={cn(
-											"flex h-7 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md border bg-background px-2",
+											"flex h-7 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border bg-background px-2",
 											"text-xs leading-none text-muted-foreground transition-colors",
 											"hover:bg-muted hover:text-foreground",
 											"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
@@ -680,8 +747,8 @@ export function PaperInfoPanel({
 											{t("paperInfo.editMeta.title")}
 										</span>
 									</button>
-								</div>
-							) : null}
+								) : null}
+							</div>
 						</div>
 					)}
 				</CollapsibleContent>

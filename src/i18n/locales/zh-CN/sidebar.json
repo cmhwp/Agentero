@@ -370,6 +370,9 @@
 	},
 	"paperInfo": {
 		"info": "信息",
+		"zhihuAsk": "去知乎提问",
+		"zhihuAskHint": "生成本论文的提问草稿并复制，然后打开知乎",
+		"zhihuAskCopied": "提问草稿已复制，去知乎粘贴即可发布",
 		"resize": "调整信息面板高度",
 		"selectPrompt": "选择一篇论文以查看元数据。",
 		"title": "标题",

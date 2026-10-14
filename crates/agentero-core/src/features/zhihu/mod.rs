@@ -94,6 +94,51 @@ impl ZhihuClient {
         parse_search_response(&text)
     }
 
+    /// 一次非流式直答，把英文标题译成简短中文（知乎提问标题上限 50 字）。
+    /// 任何失败都返回 `None`，调用方回退用原标题。
+    pub async fn translate_title(&self, title: &str) -> Option<String> {
+        let title = title.trim();
+        if title.is_empty() {
+            return None;
+        }
+        let prompt = format!(
+            "将下面这篇论文的英文标题译成简洁的中文标题。只输出译文，不加引号、书名号或句号，不超过 28 个字。\n{title}"
+        );
+        let body = serde_json::json!({
+            "model": DEFAULT_MODEL,
+            "stream": false,
+            "messages": [{ "role": "user", "content": prompt }],
+        });
+        let client = crate::http::client(SEARCH_TIMEOUT).ok()?;
+        let res = client
+            .post(format!("{BASE}/v1/chat/completions"))
+            .header("Authorization", self.bearer())
+            .header("X-Request-Timestamp", now_secs())
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .ok()?;
+        if !res.status().is_success() {
+            return None;
+        }
+        let value: serde_json::Value = res.json().await.ok()?;
+        let raw = value["choices"][0]["message"]["content"].as_str()?.trim();
+        let out = raw
+            .lines()
+            .next()
+            .unwrap_or("")
+            .trim()
+            .trim_matches(|c| matches!(c, '「' | '」' | '"' | '\'' | '《' | '》' | '。'))
+            .trim()
+            .to_string();
+        if out.is_empty() || out.chars().count() > 40 {
+            None
+        } else {
+            Some(out)
+        }
+    }
+
     /// 知乎直答（OpenAI 兼容 `/v1/chat/completions`），流式把增量交给 `on_delta`，
     /// 返回完整文本。
     pub async fn chat_stream(
@@ -258,6 +303,112 @@ fn now_secs() -> String {
     chrono::Utc::now().timestamp().to_string()
 }
 
+/// 知乎提问标题上限（平台限制）。
+pub const QUESTION_TITLE_MAX: usize = 50;
+
+/// 正文里摘要的最大字符数，避免长摘要把草稿撑爆。
+const DRAFT_ABSTRACT_MAX: usize = 800;
+
+/// 生成提问草稿所需的论文信息（均为公开元数据，前端从 catalog 取）。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct QuestionDraftInput {
+    pub title: String,
+    #[serde(default)]
+    pub authors: Vec<String>,
+    #[serde(default)]
+    pub venue: String,
+    #[serde(default)]
+    pub year: String,
+    #[serde(default)]
+    pub doi: String,
+    #[serde(default)]
+    pub arxiv_id: String,
+    /// 论文主页链接；为空时按 DOI / arXiv 推导。
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub abstract_text: String,
+}
+
+/// 交给用户发布（或复制到剪贴板）的知乎提问草稿。
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ZhihuQuestionDraft {
+    pub title: String,
+    pub body: String,
+}
+
+/// 组装知乎提问草稿：标题 `如何评价论文《…》？`（≤50 字），正文含论文信息与摘要。
+/// `zh_title` 为直答译文，缺失时回退原标题。
+pub fn question_draft(input: &QuestionDraftInput, zh_title: Option<&str>) -> ZhihuQuestionDraft {
+    let frame = |t: &str| format!("如何评价论文《{t}》？");
+    let base = zh_title
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(input.title.trim());
+    let mut title = frame(base);
+    if title.chars().count() > QUESTION_TITLE_MAX {
+        let room = QUESTION_TITLE_MAX.saturating_sub(frame("").chars().count() + 1);
+        let clipped: String = base.chars().take(room).collect();
+        title = frame(&format!("{clipped}…"));
+    }
+
+    let venue = if !input.venue.trim().is_empty() {
+        input.venue.trim().to_string()
+    } else if !input.arxiv_id.trim().is_empty() {
+        "arXiv".to_string()
+    } else {
+        String::new()
+    };
+    let link = if !input.doi.trim().is_empty() {
+        format!("https://doi.org/{}", input.doi.trim())
+    } else if !input.url.trim().is_empty() {
+        input.url.trim().to_string()
+    } else if !input.arxiv_id.trim().is_empty() {
+        format!("https://arxiv.org/abs/{}", input.arxiv_id.trim())
+    } else {
+        String::new()
+    };
+
+    let mut lines: Vec<String> = Vec::new();
+    if !input.title.trim().is_empty() {
+        lines.push(format!("论文：{}", input.title.trim()));
+    }
+    let authors: Vec<&str> = input
+        .authors
+        .iter()
+        .map(|a| a.trim())
+        .filter(|a| !a.is_empty())
+        .collect();
+    if !authors.is_empty() {
+        lines.push(format!("作者：{}", authors.join(", ")));
+    }
+    if !venue.is_empty() {
+        let year = input.year.trim();
+        let suffix = if year.is_empty() {
+            String::new()
+        } else {
+            format!("（{year}）")
+        };
+        lines.push(format!("期刊：{venue}{suffix}"));
+    }
+    if !link.is_empty() {
+        lines.push(format!("链接：{link}"));
+    }
+    let abstract_text = input.abstract_text.trim();
+    if !abstract_text.is_empty() {
+        let clipped: String = abstract_text.chars().take(DRAFT_ABSTRACT_MAX).collect();
+        lines.push(String::new());
+        lines.push(format!("摘要：{clipped}"));
+    }
+
+    ZhihuQuestionDraft {
+        title,
+        body: lines.join("\n"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -298,5 +449,62 @@ mod tests {
         let bad = r#"{"Code":30001,"Message":"频率超限","Data":null}"#;
         let err = parse_search_response(bad).unwrap_err();
         assert!(err.to_string().contains("频率超限"));
+    }
+
+    fn draft_input() -> QuestionDraftInput {
+        QuestionDraftInput {
+            title: "Hilbert's sixth problem".into(),
+            authors: vec!["Yu Deng".into(), "Zaher Hani".into()],
+            venue: "arXiv".into(),
+            year: "2025".into(),
+            doi: "10.1000/xyz".into(),
+            arxiv_id: "2503.01800".into(),
+            url: String::new(),
+            abstract_text: "A derivation of fluid equations.".into(),
+        }
+    }
+
+    #[test]
+    fn question_draft_frames_title_and_prefers_translation() {
+        let input = draft_input();
+        let english = question_draft(&input, None);
+        assert_eq!(english.title, "如何评价论文《Hilbert's sixth problem》？");
+        assert!(english.body.contains("论文：Hilbert's sixth problem"));
+        assert!(english.body.contains("作者：Yu Deng, Zaher Hani"));
+        assert!(english.body.contains("期刊：arXiv（2025）"));
+        assert!(english.body.contains("链接：https://doi.org/10.1000/xyz"));
+        assert!(english
+            .body
+            .contains("摘要：A derivation of fluid equations."));
+
+        let translated = question_draft(&input, Some("希尔伯特第六问题"));
+        assert_eq!(translated.title, "如何评价论文《希尔伯特第六问题》？");
+    }
+
+    #[test]
+    fn question_draft_caps_title_at_platform_limit() {
+        let input = QuestionDraftInput {
+            title: "x".repeat(200),
+            ..QuestionDraftInput::default()
+        };
+        let draft = question_draft(&input, None);
+        assert!(draft.title.chars().count() <= QUESTION_TITLE_MAX);
+        assert!(draft.title.ends_with("》？"));
+        assert!(draft.title.contains('…'));
+    }
+
+    #[test]
+    fn question_draft_falls_back_to_arxiv_link() {
+        let input = QuestionDraftInput {
+            title: "T".into(),
+            arxiv_id: "2503.01800".into(),
+            ..QuestionDraftInput::default()
+        };
+        let draft = question_draft(&input, None);
+        assert!(draft.body.contains("期刊：arXiv"));
+        assert!(draft
+            .body
+            .contains("链接：https://arxiv.org/abs/2503.01800"));
+        assert!(!draft.body.contains("摘要："));
     }
 }

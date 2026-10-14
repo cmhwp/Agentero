@@ -23,13 +23,21 @@ Host 契约见 [../backend/zhihu.md](../backend/zhihu.md)；完整设计（含�
 
 检索结果取开放平台 `RankingScore` 相关度 ≥ 0.5 的条目，按平台返回顺序展示，含作者与赞同数。
 
+## 论文信息栏入口
+
+左侧栏底部 **Paper Info（信息）面板** 有「去知乎提问」按钮（`paper-info-panel.tsx`）：
+
+- 按当前论文生成提问草稿——标题 `如何评价论文《…》？`（≤50 字，配了 Access Secret 时先用直答把英文标题译成中文，失败/未配则回退原标题），正文含论文 / 作者 / 期刊（年份）/ 链接 / 摘要（≤800 字）。
+- 点击后把草稿复制到剪贴板并打开 `zhihu.com`，用户粘贴发布。
+- 桌面端无法像 Chrome 扩展那样直接驱动知乎的提问弹窗（无 create-question API），所以是「复制 + 打开」而非「自动填入」。
+
 ## 凭证
 
 Access Secret 在 **设置 → Agent → 常用 Agent** 列表中「知乎」行配置（位于「自定义」上方）：
 
 - 输入框是 write-only：保存后不再回显明文，只显示可用状态点（未配置 / 检测中 / 可用 / 不可用）。
 - 存储走 Host `settings.json`（0600），IPC 上始终是 `*` 掩码；前端从不持有明文。
-- 保存后自动用一次最小检索探测连通性（消耗一次开放平台额度）；清除按钮删除本机凭证。
+- 保存后自动用一次最小检索探测连通性（消耗一次开放平台额度）。
 - 未配置时发送会返回可读错误并提示到设置页配置。
 
 Secret 获取：登录 <https://developer.zhihu.com> → profile 生成。
@@ -37,7 +45,7 @@ Secret 获取：登录 <https://developer.zhihu.com> → profile 生成。
 ## 代码
 
 - UI：`src/components/settings/panes/agent/zhihu-agent-row.tsx`（常用 Agent 列表中的「知乎」行 + 凭证编辑）
-- 前端库：`src/lib/zhihu.ts`（探测 / 掩码辅助）
+- 前端库：`src/lib/zhihu.ts`（探测 / 提问草稿 / 站点入口）
 - 论文上下文：`paperContextBlock` / `AssembleTurnPromptInput.paper`（`src/lib/agent/turn-prompt.ts`）；元数据取自 `useAgentPanelContext` 的 `selectedPaperMeta`，在 `use-agent-send` 里对 chat-only Agent 生效
 - Agent 标识：`src/lib/agent/api.ts` 的 `AgentTemplate` / `isChatOnlyAgentTemplate`；`src/components/agent/agent-logo.tsx`
 

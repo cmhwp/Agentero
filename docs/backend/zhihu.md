@@ -15,6 +15,9 @@ src-tauri/src/features/zhihu/              # Host：内置 Agent 运行器 + 探
 | `features::zhihu::run_once` | 路由（直答 / `/搜索`）、emit `agent:stream` / `agent:completed` / `agent:failed`、取消 |
 | `features::zhihu::emit_warm_events` / `models_event` / `builtin_commands` | 模型目录与斜杠命令（供配置条 / `/` 菜单） |
 | `features::zhihu::commands::zhihu_probe` | 设置页连通性探测（一次最小检索） |
+| `features::zhihu::commands::zhihu_question_draft` | 提问草稿：直答译标题（best effort）+ `question_draft` 组正文 |
+
+`question_draft` / `translate_title` 在 core；`question_draft` 是纯函数（标题 50 字上限、摘要 800 字上限、DOI/arXiv 链接回退），有单测。
 
 ## 内置 Agent 的接线
 

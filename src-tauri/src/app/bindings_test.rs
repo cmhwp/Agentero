@@ -173,6 +173,7 @@ fn export_typescript_bindings() {
             crate::features::agent::commands::agent_lifecycle_cancel,
             crate::features::agent::commands::agent_tool_uninstall_info,
             crate::features::zhihu::commands::zhihu_probe,
+            crate::features::zhihu::commands::zhihu_question_draft,
             crate::features::agent::commands::agent_run_once,
             crate::features::agent::commands::agent_list_sessions,
             crate::features::agent::commands::agent_load_session,

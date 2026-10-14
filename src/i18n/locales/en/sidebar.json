@@ -371,6 +371,9 @@
 	},
 	"paperInfo": {
 		"info": "Info",
+		"zhihuAsk": "Ask on Zhihu",
+		"zhihuAskHint": "Draft a question from this paper, copy it, then open Zhihu",
+		"zhihuAskCopied": "Question draft copied — paste it on Zhihu to publish",
 		"resize": "Resize info panel",
 		"selectPrompt": "Select a paper to see metadata.",
 		"title": "Title",
