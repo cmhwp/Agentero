@@ -16,9 +16,11 @@ import {
 	type ContextPathLabelOptions,
 	contextPathLabel,
 	normalizeContextPath,
+	paperContextRoot,
 	toPathSet,
 } from "@/lib/agent/context-path-icon";
 import type { ThinkTagParser } from "@/lib/agent/stream-parse";
+import type { PaperMetadata } from "@/lib/paper";
 import { paperDirFromPath } from "@/lib/paper";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import { isPlazaVirtualPath } from "@/lib/plaza/sources";
@@ -57,6 +59,12 @@ export type AgentPanelRefs = {
 export type AgentPanelContext = {
 	/** Focused document as Vault-relative context path (paper folder minimum). */
 	selectedVaultPath: string | null;
+	/**
+	 * Catalog metadata for the focused paper, when the focus is a paper and the
+	 * catalog knows it. Used as public context for chat-only agents that cannot
+	 * read Vault files.
+	 */
+	selectedPaperMeta: PaperMetadata | null;
 	directoryPathSet: ReadonlySet<string>;
 	paperPathSet: ReadonlySet<string>;
 	pathLabelOptions: ContextPathLabelOptions;
@@ -106,6 +114,18 @@ export function useAgentPanelContext({
 		const paperDir = paperDirFromPath(relative, vaultPaperPaths);
 		return paperDir ?? relative;
 	}, [selectedPath, vaultPath, vaultPaperPaths]);
+	/**
+	 * Catalog metadata for the focused paper (chat-only agent context). Only
+	 * resolved when the focus maps to a known paper folder — a plain note or
+	 * virtual tab yields null.
+	 */
+	const selectedPaperMeta = useMemo(() => {
+		if (!paperMetaByRelPath || !selectedVaultPath) return null;
+		const root = paperContextRoot(selectedVaultPath, vaultPaperPaths);
+		if (!root) return null;
+		return paperMetaByRelPath.get(root) ?? null;
+	}, [paperMetaByRelPath, selectedVaultPath, vaultPaperPaths]);
+
 	/** O(1) lookups for context chip icons (paper → ScrollText, dir → Folder). */
 	const directoryPathSet = useMemo(
 		() => toPathSet(vaultDirectoryPaths),
@@ -206,6 +226,7 @@ export function useAgentPanelContext({
 
 	return {
 		selectedVaultPath,
+		selectedPaperMeta,
 		directoryPathSet,
 		paperPathSet,
 		pathLabelOptions,

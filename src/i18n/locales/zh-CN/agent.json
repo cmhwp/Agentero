@@ -59,6 +59,14 @@
 		"queueLabel": "等待发送",
 		"queueRemove": "从队列移除",
 		"contextInstruction": "请在回答相关问题前读取以下知识库文件：",
+		"paperContext": {
+			"heading": "当前论文（供参考）：",
+			"title": "标题",
+			"authors": "作者",
+			"venue": "期刊/来源",
+			"year": "年份",
+			"abstract": "摘要"
+		},
 		"plazaContextInstruction": "以下是通过 @ 引用的广场条目（尚未入库）：",
 		"plazaEntryUnavailable": "条目元数据不可用（已不在广场缓存中），可请用户从广场重新引用。",
 		"plazaScratchInstruction": "全文已提供为 Vault 之外的只读临时副本，请直接读取上述文件；除非用户明确要求入库，不要下载论文或向 Vault 写入任何内容。",

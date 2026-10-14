@@ -59,6 +59,14 @@
 		"queueLabel": "Queued",
 		"queueRemove": "Remove from queue",
 		"contextInstruction": "Read these Vault files before answering when relevant:",
+		"paperContext": {
+			"heading": "Current paper (for reference):",
+			"title": "Title",
+			"authors": "Authors",
+			"venue": "Venue",
+			"year": "Year",
+			"abstract": "Abstract"
+		},
 		"plazaContextInstruction": "Plaza entries referenced with @ (not yet in the Vault):",
 		"plazaEntryUnavailable": "Entry metadata is unavailable (no longer in the Plaza cache). Ask the user to re-reference it from the Plaza tab.",
 		"plazaScratchInstruction": "Full texts are provided as read-only scratch copies outside the Vault. Read the listed files directly; do not download papers or write anything into the Vault unless the user explicitly asks to import a paper.",

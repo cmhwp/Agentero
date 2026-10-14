@@ -86,6 +86,7 @@ import {
 	visualDraftsForSession,
 } from "@/lib/agent/visual-context-store";
 import { isTauri } from "@/lib/core/tauri";
+import type { PaperMetadata } from "@/lib/paper";
 import {
 	bindVisualTracesForTurn,
 	isVisualTraceHistoryId,
@@ -177,6 +178,8 @@ export type UseAgentSendOptions = {
 	setHistoryOpen: Dispatch<SetStateAction<boolean>>;
 	setSelectedAgentId: Dispatch<SetStateAction<string | null>>;
 	selectedVaultPath: string | null;
+	/** Catalog metadata for the focused paper (chat-only agent context). */
+	selectedPaperMeta: PaperMetadata | null;
 	contextPaths: string[];
 	/** Live composer state plus the session-scoped persistence API. */
 	composer: SessionComposerStateApi;
@@ -228,6 +231,7 @@ export function useAgentSend({
 	setHistoryOpen,
 	setSelectedAgentId,
 	selectedVaultPath,
+	selectedPaperMeta,
 	contextPaths,
 	composer: {
 		snapshot: snapshotComposerState,
@@ -674,19 +678,31 @@ export function useAgentSend({
 			const target = resolveResumeTarget(options, forceNewSession);
 			// Chat-only built-in agents (e.g. the Zhihu agent) cannot read Vault
 			// files; injecting the read-instruction block would leak local paths to
-			// a third-party service, so drop the auto-added context entirely.
+			// a third-party service, so drop the auto-added context entirely and
+			// send only public paper metadata instead.
 			const chatOnly = isChatOnlyAgentTemplate(
 				agentTemplateById(registry, agent.agentId),
 			);
 			const turnContextPaths = chatOnly ? [] : resolvedContextPaths;
+			// A bare `/搜索` means "search this paper": expand it to the title. The
+			// paper block is omitted for a search command so it cannot bleed into
+			// the query.
+			const bareSearch = /^\/(?:搜索|search)\s*$/.test(text);
+			const paperTitle = selectedPaperMeta?.title?.trim() ?? "";
+			const turnText =
+				chatOnly && bareSearch && paperTitle ? `/搜索 ${paperTitle}` : textRaw;
+			const isSearchCommand = /^\/(?:搜索|search)(\s|$)/.test(text);
+			const turnPaper =
+				chatOnly && !isSearchCommand ? (selectedPaperMeta ?? null) : null;
 			const plazaScratchByPath = await preparePlazaScratchFor(
 				turnContextPaths,
 				isAcpCommand,
 			);
 			const { prompt, images, visualAnnotations, historyTitle } =
 				assembleTurnPrompt({
-					text: textRaw,
+					text: turnText,
 					contextPaths: turnContextPaths,
+					paper: turnPaper,
 					selections: resolvedSelections,
 					visualDrafts: resolvedVisualDrafts,
 					attachedImages,
