@@ -65,6 +65,9 @@ type PaperInfoPanelProps = {
 	onTagsChange?: (tags: PaperTag[]) => Promise<void> | void;
 };
 
+/** Host-built Zhihu question draft (mirrors `ZhihuQuestionDraft`). */
+type ZhihuDraft = { title: string; body: string };
+
 function MetaRow({
 	icon: Icon,
 	label,
@@ -393,6 +396,9 @@ export function PaperInfoPanel({
 	const [isDragging, setIsDragging] = useState(false);
 	/** Building the Zhihu question draft (Host round trip + optional translation). */
 	const [zhihuBusy, setZhihuBusy] = useState(false);
+	/** Last generated draft, shown in a popover so the user can inspect it. */
+	const [zhihuDraft, setZhihuDraft] = useState<ZhihuDraft | null>(null);
+	const [zhihuDraftOpen, setZhihuDraftOpen] = useState(false);
 	const dragRef = useRef<{
 		startY: number;
 		startHeight: number;
@@ -488,10 +494,18 @@ export function PaperInfoPanel({
 
 	/**
 	 * "去知乎提问": build a question draft from the current paper (title
-	 * translated via Zhida when a secret is set), copy it, then open Zhihu. A
-	 * desktop app cannot fill Zhihu's ask modal, so the draft lands on the
-	 * clipboard for the user to paste.
+	 * translated via Zhida when a secret is set), show it, copy it, then open
+	 * Zhihu. A desktop app cannot fill Zhihu's ask modal, so the draft lands on
+	 * the clipboard for the user to paste.
 	 */
+	const copyZhihuDraft = async (draft: ZhihuDraft) => {
+		await copyTextToClipboard(`${draft.title}\n\n${draft.body}`, {
+			successMessage: t("paperInfo.zhihuAskCopied"),
+			errorMessage: t("paperInfo.copyFailed"),
+			successNotify: { duration: 5000, id: "zhihu-ask-copied" },
+		});
+	};
+
 	const askOnZhihu = async () => {
 		if (!meta || zhihuBusy) return;
 		setZhihuBusy(true);
@@ -506,11 +520,9 @@ export function PaperInfoPanel({
 				url: meta.html_url ?? meta.source_url ?? "",
 				abstractText: meta.abstract ?? "",
 			});
-			await copyTextToClipboard(`${draft.title}\n\n${draft.body}`, {
-				successMessage: t("paperInfo.zhihuAskCopied"),
-				errorMessage: t("paperInfo.copyFailed"),
-				successNotify: { duration: 5000, id: "zhihu-ask-copied" },
-			});
+			setZhihuDraft(draft);
+			setZhihuDraftOpen(true);
+			await copyZhihuDraft(draft);
 			openExternalUrl(ZHIHU_HOME_URL);
 		} catch (e) {
 			notifyError(errorText(e));
@@ -704,33 +716,77 @@ export function PaperInfoPanel({
 								</div>
 							) : null}
 							<div className="px-3 pt-2">
-								<button
-									type="button"
-									onClick={() => void askOnZhihu()}
-									disabled={zhihuBusy}
-									title={t("paperInfo.zhihuAskHint")}
-									aria-label={t("paperInfo.zhihuAsk")}
-									className={cn(
-										"flex h-7 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md border bg-background px-2",
-										"text-xs leading-none text-muted-foreground transition-colors",
-										"hover:bg-muted hover:text-foreground",
-										"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-										"disabled:pointer-events-none disabled:opacity-60",
-									)}
+								<Popover
+									open={zhihuDraftOpen && Boolean(zhihuDraft)}
+									onOpenChange={setZhihuDraftOpen}
 								>
-									{zhihuBusy ? (
-										<Loader2
-											className="size-3.5 shrink-0 animate-spin"
-											aria-hidden
-										/>
-									) : (
-										<SiZhihu
-											className="size-3.5 shrink-0 text-[#0084FF]"
-											aria-hidden
-										/>
-									)}
-									<span className="truncate">{t("paperInfo.zhihuAsk")}</span>
-								</button>
+									<PopoverTrigger asChild>
+										<button
+											type="button"
+											onClick={() => void askOnZhihu()}
+											disabled={zhihuBusy}
+											title={t("paperInfo.zhihuAskHint")}
+											aria-label={t("paperInfo.zhihuAsk")}
+											className={cn(
+												"flex h-7 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md border bg-background px-2",
+												"text-xs leading-none text-muted-foreground transition-colors",
+												"hover:bg-muted hover:text-foreground",
+												"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+												"disabled:pointer-events-none disabled:opacity-60",
+											)}
+										>
+											{zhihuBusy ? (
+												<Loader2
+													className="size-3.5 shrink-0 animate-spin"
+													aria-hidden
+												/>
+											) : (
+												<SiZhihu
+													className="size-3.5 shrink-0 text-[#0084FF]"
+													aria-hidden
+												/>
+											)}
+											<span className="truncate">
+												{t("paperInfo.zhihuAsk")}
+											</span>
+										</button>
+									</PopoverTrigger>
+									<PopoverContent
+										side="top"
+										align="start"
+										className="w-80 gap-2 p-3"
+									>
+										{zhihuDraft ? (
+											<div className="flex flex-col gap-2">
+												<div className="text-xs font-medium text-muted-foreground">
+													{t("paperInfo.zhihuDraftHeading")}
+												</div>
+												<div className="rounded-md border bg-muted/40 p-2">
+													<div className="break-words font-medium text-foreground text-xs">
+														{zhihuDraft.title}
+													</div>
+													<div className="agentero-scroll mt-1.5 max-h-52 overflow-y-auto whitespace-pre-wrap break-words text-caption text-muted-foreground">
+														{zhihuDraft.body}
+													</div>
+												</div>
+												<div>
+													<button
+														type="button"
+														onClick={() => void copyZhihuDraft(zhihuDraft)}
+														className={cn(
+															"flex h-6 cursor-pointer items-center justify-center gap-1.5 rounded-md border bg-background px-2",
+															"text-caption leading-none text-muted-foreground transition-colors",
+															"hover:bg-muted hover:text-foreground",
+															"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+														)}
+													>
+														{t("paperInfo.zhihuDraftCopy")}
+													</button>
+												</div>
+											</div>
+										) : null}
+									</PopoverContent>
+								</Popover>
 							</div>
 							{canEditMeta ? (
 								<div className="px-3 pt-2">
