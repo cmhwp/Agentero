@@ -16,7 +16,7 @@ import { AgentUserAgentBlock } from "@/components/settings/panes/agent/agent-use
 import { useAgentCatalog } from "@/components/settings/panes/agent/use-agent-catalog";
 import { useAgentRegistry } from "@/components/settings/panes/agent/use-agent-registry";
 import { useAgentUninstall } from "@/components/settings/panes/agent/use-agent-uninstall";
-import { ZhihuSecretBlock } from "@/components/settings/panes/agent/zhihu-secret-block";
+import { ZhihuAgentRow } from "@/components/settings/panes/agent/zhihu-agent-row";
 import { catalogProbeKey } from "@/components/settings/panes/agent-catalog";
 import { AgentUninstallDialog } from "@/components/settings/panes/agent-uninstall-dialog";
 import {
@@ -196,6 +196,10 @@ export function AgentPane({
 					onOpenCli={onOpenCli}
 					onEditCustom={handleAddCustom}
 				/>
+				<ZhihuAgentRow
+					savedSecret={settings.zhihuAccessSecret}
+					onCommit={(value) => patch({ zhihuAccessSecret: value })}
+				/>
 				<AgentCustomForm busy={loading} onSubmit={handleAddCustom} />
 			</SettingsGroup>
 			<p className="mt-2 mb-3 px-0.5 text-muted-foreground text-xs leading-relaxed">
@@ -233,11 +237,6 @@ export function AgentPane({
 				initialUserAgent={catalog?.userAgent ?? ""}
 				initialProviderIds={catalog?.userAgentProviderIds ?? ""}
 				onCommitted={patchUserAgent}
-			/>
-
-			<ZhihuSecretBlock
-				savedSecret={settings.zhihuAccessSecret}
-				onCommit={(value) => patch({ zhihuAccessSecret: value })}
 			/>
 
 			<AgentEmbeddingBlock settings={settings} patch={patch} />

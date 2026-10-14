@@ -286,13 +286,11 @@
 			"keyLabel": "Access Secret",
 			"placeholder": "Paste the Zhihu Access Secret",
 			"confirm": "Save",
-			"clear": "Clear",
 			"openKeyPage": "Open Zhihu developer console",
 			"probeIdle": "Not configured",
 			"probeProbing": "Checking…",
 			"probeOk": "Ready",
-			"probeFail": "Unavailable",
-			"hint": "Used by the built-in Zhihu Agent for Zhida answers and title search. Stored locally, never uploaded."
+			"probeFail": "Unavailable"
 		},
 		"userAgent": {
 			"section": "Relay compatibility",
