@@ -32,7 +32,7 @@ pub struct ZhihuClient {
 }
 
 /// 检索结果条目（对齐开放平台 `zhihu_search` 的字段）。
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ZhihuSearchItem {
     /// `answer` | `article`

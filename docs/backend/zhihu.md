@@ -12,9 +12,10 @@ src-tauri/src/features/zhihu/              # Host：内置 Agent 运行器 + 探
 | 模块 | 职责 |
 |---|---|
 | `agentero-core::features::zhihu::ZhihuClient` | 直答（SSE 流式）、标题检索、信封解析、相关度阈值 |
-| `features::zhihu::run_once` | 路由（直答 / `/搜索`）、emit `agent:stream` / `agent:completed` / `agent:failed`、取消 |
-| `features::zhihu::emit_warm_events` / `models_event` / `builtin_commands` | 模型目录与斜杠命令（供配置条 / `/` 菜单） |
+| `features::zhihu::run_once` | 直答运行：emit `agent:stream` / `agent:completed` / `agent:failed`、取消 |
+| `features::zhihu::emit_warm_events` / `models_event` / `builtin_commands` | 模型目录与斜杠命令（知乎无斜杠命令，返回空列表） |
 | `features::zhihu::commands::zhihu_probe` | 设置页连通性探测（一次最小检索） |
+| `features::zhihu::commands::zhihu_search` | 标题检索（`RankingScore ≥ 0.5` 过滤后返回结构化条目），供空态推荐卡片 |
 | `features::zhihu::commands::zhihu_question_draft` | 提问草稿：直答译标题（best effort）+ `question_draft` 组正文 |
 
 `question_draft` / `translate_title` 在 core；`question_draft` 是纯函数（标题 50 字上限、摘要 800 字上限、DOI/arXiv 链接回退），有单测。
@@ -45,5 +46,5 @@ Access Secret 存 `AppSettings.zhihu_access_secret`（XDG `settings.json`，0600
 ## 限制与后续
 
 - 直答为单轮，多轮上下文靠前端 transcript 回放。
-- 精确论文↔讨论索引（别名、ORCID 绑定、作者优先排序）未接入，需知乎侧服务端接口；`/搜索` 目前是标题/关键词检索兜底。
+- 精确论文↔讨论索引（别名、ORCID 绑定、作者优先排序）未接入，需知乎侧服务端接口；`zhihu_search`（空态推荐卡片）目前是标题检索兜底。
 - 额度由开放平台按能力组限制；错误消息原样透传（30001 频率 / 30002 配额等）。

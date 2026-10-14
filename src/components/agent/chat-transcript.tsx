@@ -30,6 +30,7 @@ import {
 	transcriptLineKey,
 	useTranscriptVirtualizer,
 } from "@/components/agent/hooks/use-transcript-virtualizer";
+import { ZhihuDiscussions } from "@/components/agent/zhihu-discussions";
 import {
 	Checkpoint,
 	CheckpointIcon,
@@ -79,7 +80,11 @@ import {
 	CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
-import { type AgentPhaseState, isAgentAuthFailure } from "@/lib/agent/api";
+import {
+	type AgentPhaseState,
+	isAgentAuthFailure,
+	isChatOnlyAgentTemplate,
+} from "@/lib/agent/api";
 import {
 	type AgentPart,
 	agentTextFromParts,
@@ -97,6 +102,7 @@ import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
 import { selectionNavigationStore } from "@/lib/agent/selection-navigation-state";
 import { selectionsPromptBlock } from "@/lib/agent/selection-prompt";
 import { cn } from "@/lib/core/utils";
+import type { PaperMetadata } from "@/lib/paper";
 
 /** Compact note: interactive form is docked below, not inside the tool card. */
 function AskUserToolPendingNote() {
@@ -877,6 +883,8 @@ export function ChatTranscript({
 	onSendSuggestion,
 	onAgentLogin,
 	onOpenSource,
+	agentTemplate = null,
+	paper = null,
 	phase = null,
 }: {
 	lines: ChatLine[];
@@ -904,12 +912,19 @@ export function ChatTranscript({
 	onAgentLogin?: () => void;
 	/** Open a vault path / paper (or external URL) from Sources / inline citation. */
 	onOpenSource?: (source: string) => void;
+	/** Active agent template — chat-only built-ins (Zhihu) get a bespoke empty state. */
+	agentTemplate?: string | null;
+	/** Focused paper metadata, used by the Zhihu empty-state discussion cards. */
+	paper?: PaperMetadata | null;
 	/** Loading phase of the in-flight turn (starting / waiting-model / reconnecting). */
 	phase?: AgentPhaseState | null;
 }) {
 	const { t } = useTranslation("agent");
 	const restoringHistorySession =
 		hydratingSessionId === activeTabId && lines.length === 0;
+	// Chat-only built-ins (Zhihu) replace the generic suggestions with their own
+	// empty state.
+	const zhihuEmpty = isChatOnlyAgentTemplate(agentTemplate);
 
 	// Lifted Reasoning/Tool/Plan open state so virtualized rows keep their
 	// fold state across unmount/remount. Keyed by `${rowKey}:${part.id}`.
@@ -1000,28 +1015,32 @@ export function ChatTranscript({
 							title={t("empty.title")}
 							description={t("empty.description")}
 						>
-							<div className="mt-4 flex w-full max-w-sm flex-col items-stretch gap-2">
-								{activeTabIsRunning ? (
-									<Shimmer className="text-center text-sm">
-										{t("empty.waiting")}
-									</Shimmer>
-								) : (
-									SUGGESTION_KEYS.map((key) => {
-										const label = t(`suggestions.${key}`);
-										return (
-											<Suggestion
-												key={key}
-												suggestion={label}
-												className="h-auto w-full justify-start whitespace-normal rounded-lg px-3 py-2.5 text-left"
-												onClick={(v) =>
-													onSendSuggestion(v, SUGGESTION_WORKFLOW[key])
-												}
-												disabled={activeTabIsRunning}
-											/>
-										);
-									})
-								)}
-							</div>
+							{zhihuEmpty ? (
+								<ZhihuDiscussions paper={paper} />
+							) : (
+								<div className="mt-4 flex w-full max-w-sm flex-col items-stretch gap-2">
+									{activeTabIsRunning ? (
+										<Shimmer className="text-center text-sm">
+											{t("empty.waiting")}
+										</Shimmer>
+									) : (
+										SUGGESTION_KEYS.map((key) => {
+											const label = t(`suggestions.${key}`);
+											return (
+												<Suggestion
+													key={key}
+													suggestion={label}
+													className="h-auto w-full justify-start whitespace-normal rounded-lg px-3 py-2.5 text-left"
+													onClick={(v) =>
+														onSendSuggestion(v, SUGGESTION_WORKFLOW[key])
+													}
+													disabled={activeTabIsRunning}
+												/>
+											);
+										})
+									)}
+								</div>
+							)}
 						</ConversationEmptyState>
 					</div>
 				) : (

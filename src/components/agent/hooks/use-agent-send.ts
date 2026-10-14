@@ -684,23 +684,16 @@ export function useAgentSend({
 				agentTemplateById(registry, agent.agentId),
 			);
 			const turnContextPaths = chatOnly ? [] : resolvedContextPaths;
-			// A bare `/搜索` means "search this paper": expand it to the title. The
-			// paper block is omitted for a search command so it cannot bleed into
-			// the query.
-			const bareSearch = /^\/(?:搜索|search)\s*$/.test(text);
-			const paperTitle = selectedPaperMeta?.title?.trim() ?? "";
-			const turnText =
-				chatOnly && bareSearch && paperTitle ? `/搜索 ${paperTitle}` : textRaw;
-			const isSearchCommand = /^\/(?:搜索|search)(\s|$)/.test(text);
-			const turnPaper =
-				chatOnly && !isSearchCommand ? (selectedPaperMeta ?? null) : null;
+			// Chat-only agents get the focused paper's public metadata (never a
+			// local path) so they can answer about "this paper".
+			const turnPaper = chatOnly ? (selectedPaperMeta ?? null) : null;
 			const plazaScratchByPath = await preparePlazaScratchFor(
 				turnContextPaths,
 				isAcpCommand,
 			);
 			const { prompt, images, visualAnnotations, historyTitle } =
 				assembleTurnPrompt({
-					text: turnText,
+					text: textRaw,
 					contextPaths: turnContextPaths,
 					paper: turnPaper,
 					selections: resolvedSelections,

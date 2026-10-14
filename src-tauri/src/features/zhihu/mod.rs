@@ -4,9 +4,8 @@
 //! `agent:*` 事件（stream / completed / failed / models / commands），因此
 //! 右侧栏 Agent 面板无需任何特殊分支即可渲染。凭证来自 App settings。
 //!
-//! 能力：
-//! - 默认：知乎直答（流式）。
-//! - `/搜索 <关键词>`：按标题检索知乎内容（原型的「查索引」，真后端待接入）。
+//! 能力：知乎直答（流式）。论文相关内容检索改由 `zhihu_search` 命令驱动，
+//! 供知乎 Agent 空态的推荐卡片使用，不再走聊天斜杠命令。
 
 pub mod commands;
 
@@ -15,8 +14,8 @@ use std::sync::{Arc, Mutex};
 use agentero_core::features::zhihu::{ZhihuClient, DEFAULT_MODEL};
 
 use crate::features::agent::models::{
-    AgentCommand, AgentCommandInput, AgentCommandsEvent, AgentFailedEvent, AgentModelChoice,
-    AgentModelsEvent, AgentResultPayload, AgentStreamEvent, AgentStreamKind,
+    AgentCommand, AgentCommandsEvent, AgentFailedEvent, AgentModelChoice, AgentModelsEvent,
+    AgentResultPayload, AgentStreamEvent, AgentStreamKind,
 };
 use crate::features::agent::AgentEventEmitter;
 
@@ -56,15 +55,10 @@ pub fn models_event(agent_id: &str, session_id: &str, current: &str) -> AgentMod
     }
 }
 
-/// 斜杠命令清单（供 composer `/` 菜单）。
+/// 斜杠命令清单（供 composer `/` 菜单）。知乎没有斜杠命令：内容检索走
+/// `zhihu_search` 命令 + 空态推荐卡片。
 pub fn builtin_commands() -> Vec<AgentCommand> {
-    vec![AgentCommand {
-        name: "搜索".to_string(),
-        description: "按标题检索知乎内容".to_string(),
-        input: Some(AgentCommandInput {
-            hint: "关键词".to_string(),
-        }),
-    }]
+    Vec::new()
 }
 
 /// 广播模型目录 + 斜杠命令（面板打开 / 切换 Agent 时 warm 调用）。
@@ -127,29 +121,14 @@ async fn execute(
         .filter(|m| !m.is_empty())
         .unwrap_or(ZHIHU_MODEL_ID);
 
-    match parse_route(&params.prompt) {
-        Route::Search(query) => run_search(params, &client, provider_session_id, &query).await,
-        Route::Chat(prompt) => run_chat(params, &client, provider_session_id, model, &prompt).await,
-    }
-}
-
-enum Route {
-    Search(String),
-    Chat(String),
-}
-
-/// `/搜索` / `/search` 前缀 → 检索；其余 → 直答。命令与关键词之间必须空白分隔，
-/// 避免 `/搜索历史` 被误判。
-fn parse_route(prompt: &str) -> Route {
-    let trimmed = prompt.trim();
-    for prefix in ["/搜索", "/search"] {
-        if let Some(rest) = trimmed.strip_prefix(prefix) {
-            if rest.is_empty() || rest.starts_with(char::is_whitespace) {
-                return Route::Search(rest.trim().to_string());
-            }
-        }
-    }
-    Route::Chat(trimmed.to_string())
+    run_chat(
+        params,
+        &client,
+        provider_session_id,
+        model,
+        params.prompt.trim(),
+    )
+    .await
 }
 
 async fn run_chat(
@@ -196,63 +175,6 @@ async fn run_chat(
     Ok(())
 }
 
-async fn run_search(
-    params: &ZhihuRunOnce,
-    client: &ZhihuClient,
-    provider_session_id: &str,
-    query: &str,
-) -> Result<(), agentero_core::error::AppError> {
-    if query.is_empty() {
-        return Err(agentero_core::error::AppError::message(
-            "请提供检索关键词，例如 /搜索 希尔伯特第六问题",
-        ));
-    }
-    let mut items = client.search(query, 10).await?;
-    items.retain(|item| item.score >= agentero_core::features::zhihu::SEARCH_SCORE_FLOOR);
-    let text = format_search_results(query, &items);
-    let _ = params.app.emit(
-        "agent:stream",
-        AgentStreamEvent {
-            session_id: params.session_id.clone(),
-            chunk: text.clone(),
-            kind: AgentStreamKind::Message,
-        },
-    );
-    emit_completed(params, provider_session_id, text, None);
-    Ok(())
-}
-
-fn format_search_results(
-    query: &str,
-    items: &[agentero_core::features::zhihu::ZhihuSearchItem],
-) -> String {
-    if items.is_empty() {
-        return format!("知乎上暂无与「{query}」相关的讨论。");
-    }
-    let mut out = format!("**知乎检索：{query}**\n\n");
-    for (idx, item) in items.iter().enumerate() {
-        let kind = if item.kind == "answer" {
-            "回答"
-        } else {
-            "文章"
-        };
-        out.push_str(&format!(
-            "{}. [{}]({}) — {} · {} 赞同（{}）\n",
-            idx + 1,
-            item.title,
-            item.url,
-            item.author,
-            item.votes,
-            kind
-        ));
-        let excerpt = item.excerpt.trim();
-        if !excerpt.is_empty() {
-            out.push_str(&format!("   > {excerpt}\n"));
-        }
-    }
-    out
-}
-
 fn emit_completed(
     params: &ZhihuRunOnce,
     provider_session_id: &str,
@@ -292,44 +214,10 @@ async fn wait_cancel(cancel: &mut tokio::sync::watch::Receiver<bool>) {
 mod tests {
     use super::*;
 
+    /// Content search moved out of chat: the Zhihu agent exposes no slash
+    /// commands, only 直答.
     #[test]
-    fn routes_slash_search_and_default_chat() {
-        match parse_route("/搜索 希尔伯特第六问题") {
-            Route::Search(q) => assert_eq!(q, "希尔伯特第六问题"),
-            _ => panic!("expected search"),
-        }
-        match parse_route("/search Ricci flow") {
-            Route::Search(q) => assert_eq!(q, "Ricci flow"),
-            _ => panic!("expected search"),
-        }
-        // No whitespace separator → treated as a plain question, not a command.
-        match parse_route("/搜索历史") {
-            Route::Chat(q) => assert_eq!(q, "/搜索历史"),
-            _ => panic!("expected chat"),
-        }
-        match parse_route("这篇论文讲了什么") {
-            Route::Chat(q) => assert_eq!(q, "这篇论文讲了什么"),
-            _ => panic!("expected chat"),
-        }
-    }
-
-    #[test]
-    fn search_markdown_lists_links() {
-        let item = agentero_core::features::zhihu::ZhihuSearchItem {
-            kind: "answer".into(),
-            title: "如何理解".into(),
-            url: "https://www.zhihu.com/question/1/answer/2".into(),
-            excerpt: "摘要".into(),
-            author: "某人".into(),
-            votes: 12,
-            score: 1.5,
-        };
-        let md = format_search_results("关键词", &[item]);
-        assert!(md.contains("[如何理解](https://www.zhihu.com/question/1/answer/2)"));
-        assert!(md.contains("12 赞同"));
-        assert_eq!(
-            format_search_results("x", &[]),
-            "知乎上暂无与「x」相关的讨论。"
-        );
+    fn builtin_commands_are_empty() {
+        assert!(builtin_commands().is_empty());
     }
 }

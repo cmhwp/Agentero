@@ -179,6 +179,7 @@ export const AgentPanel = memo(function AgentPanel({
 
 	const {
 		lines,
+		selectedPaperMeta,
 		activeTabId,
 		hydratingSessionId,
 		selected,
@@ -371,6 +372,8 @@ export const AgentPanel = memo(function AgentPanel({
 						onSendSuggestion={sendSuggestion}
 						onAgentLogin={selectedLogin ? openSelectedAgentLogin : undefined}
 						onOpenSource={onOpenSource}
+						agentTemplate={selected?.template ?? null}
+						paper={selectedPaperMeta}
 					/>
 
 					{/* Questionnaire replaces the composer until submit/cancel. */}

@@ -9,6 +9,7 @@ import {
 	commands,
 	type QuestionDraftInput,
 	type ZhihuQuestionDraft,
+	type ZhihuSearchItem,
 } from "@/lib/core/bindings";
 import { callApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
@@ -54,5 +55,20 @@ export async function buildZhihuQuestionDraft(
 	return callApi(() => commands.zhihuQuestionDraft(input), {
 		fallback: "Zhihu question draft failed",
 		desktopOnly: "Zhihu question draft requires the desktop app",
+	});
+}
+
+/**
+ * Title / keyword search on Zhihu, used by the Zhihu agent's empty-state
+ * recommendation cards. The Host applies the relevance floor and returns only
+ * items worth showing; results are marked "possibly unrelated" in the UI.
+ */
+export async function searchZhihuDiscussions(
+	query: string,
+	count = 10,
+): Promise<ZhihuSearchItem[]> {
+	return callApi(() => commands.zhihuSearch(query, count), {
+		fallback: "Zhihu search failed",
+		desktopOnly: "Zhihu search requires the desktop app",
 	});
 }

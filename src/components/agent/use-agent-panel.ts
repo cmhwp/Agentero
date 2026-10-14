@@ -566,6 +566,7 @@ export function useAgentPanel({
 		t,
 		// Transcript
 		lines,
+		selectedPaperMeta,
 		activeTabId,
 		hydratingSessionId,
 		selected,

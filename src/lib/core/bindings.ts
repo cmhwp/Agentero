@@ -469,6 +469,12 @@ export const commands = {
 	 */
 	zhihuProbe: () => __TAURI_INVOKE<ApiResult<boolean>>("zhihu_probe"),
 	/**
+	 *  按标题 / 关键词检索知乎内容，供知乎 Agent 空态的推荐卡片使用。
+	 *  只返回相关度达标的条目（`RankingScore ≥ SEARCH_SCORE_FLOOR`）；未配置凭证返回
+	 *  `zhihuNoSecret` 域错误，其余失败原样透传。
+	 */
+	zhihuSearch: (query: string, count: number | null) => __TAURI_INVOKE<ApiResult<ZhihuSearchItem[]>>("zhihu_search", { query, count }),
+	/**
 	 *  生成知乎提问草稿：标题优先用直答译成中文（未配凭证/失败时回退原标题），
 	 *  正文为论文信息 + 摘要。桌面端无法像扩展那样直接填知乎提问弹窗，前端拿到草稿后
 	 *  复制到剪贴板并打开知乎。
@@ -5751,6 +5757,19 @@ export type WindowClosedEvent_Serialize = {
 export type ZhihuQuestionDraft = {
 	title: string,
 	body: string,
+};
+
+/**  检索结果条目（对齐开放平台 `zhihu_search` 的字段）。 */
+export type ZhihuSearchItem = {
+	/**  `answer` | `article` */
+	kind: string,
+	title: string,
+	url: string,
+	excerpt: string,
+	author: string,
+	votes: number,
+	/**  开放平台的 `RankingScore`。 */
+	score: number | null,
 };
 
 /**  A Zotero collection surfaced in the scan preview (for the folder picker). */

@@ -9,17 +9,24 @@ Host 契约见 [../backend/zhihu.md](../backend/zhihu.md)；完整设计（含�
 内置 Agent，不是外部 ACP 进程：
 
 - 注册表在启动时注入一条 `template: "zhihu"` 的 descriptor（`built-in-zhihu`），`available: true`，因此在切换器里无需探测/安装即可见。
-- 选择后在右栏 Agent 面板正常对话：流式直答、`/搜索` 斜杠命令、模型配置条、历史项行为都与外部 Agent 一致。
+- 选择后在右栏 Agent 面板正常对话：流式直答、模型配置条、历史项行为都与外部 Agent 一致。知乎**没有斜杠命令**。
 - 它是 **chat-only**：不读 Vault、不跑 ACP、不做 `session/list`。因此它不出现在「翻译 / PDF Ask」的 Agent 选择器里。
 - 它拿不到 Vault 文件，但仍会收到**当前论文的公开元数据**（标题 / 作者 / 期刊 / 年份 / arXiv / DOI / 摘要，摘要截断 1200 字），由 `assembleTurnPrompt` 的 `paper` 参数注入。本地路径**从不**发送。
+
+## 空态推荐卡片
+
+知乎 Agent 打开且当前对话为空时，不显示通用工作流建议（总结当前论文 / 就我的文献库提问…），而是**直接**用当前论文标题检索知乎，把命中的问题/回答/文章渲染成推荐卡片（`zhihu-discussions.tsx`）：
+
+- 打开即检索（标题变化时重取）；点击卡片在系统浏览器打开知乎原文；「换一批」重新检索。
+- 状态：未打开论文 / 未配置 Access Secret / 检索中（骨架）/ 空 / 失败（可重试）。
+- 结果由 Host `zhihu_search` 命令返回，已按 `RankingScore ≥ 0.5` 过滤；卡片顶部标注「按论文标题检索，结果可能与本文无关」。
+- 独立于聊天：不走 `agent:*` 事件、不产生对话消息。
 
 ## 能力
 
 | 输入 | 行为 |
 |---|---|
 | 纯文本 | 知乎直答（`/v1/chat/completions`，流式），增量渲染为普通 Agent 消息；提示词附带当前论文公开元数据，可直接问「总结当前论文」 |
-| `/搜索 <关键词>` | 按标题检索知乎，结果以 Markdown 链接列表返回（`/search` 同样可用） |
-| `/搜索`（不带关键词） | 自动用当前论文标题检索 |
 
 检索结果取开放平台 `RankingScore` 相关度 ≥ 0.5 的条目，按平台返回顺序展示，含作者与赞同数。
 
@@ -45,7 +52,8 @@ Secret 获取：登录 <https://developer.zhihu.com> → profile 生成。
 ## 代码
 
 - UI：`src/components/settings/panes/agent/zhihu-agent-row.tsx`（常用 Agent 列表中的「知乎」行 + 凭证编辑）
-- 前端库：`src/lib/zhihu.ts`（探测 / 提问草稿 / 站点入口）
+- 空态推荐卡片：`src/components/agent/zhihu-discussions.tsx`（`ZhihuDiscussions`）；`chat-transcript.tsx` 在 `isChatOnlyAgentTemplate(agentTemplate)` 时用它替换通用建议
+- 前端库：`src/lib/zhihu.ts`（探测 / 检索 `searchZhihuDiscussions` / 提问草稿 / 站点入口）
 - 论文上下文：`paperContextBlock` / `AssembleTurnPromptInput.paper`（`src/lib/agent/turn-prompt.ts`）；元数据取自 `useAgentPanelContext` 的 `selectedPaperMeta`，在 `use-agent-send` 里对 chat-only Agent 生效
 - Agent 标识：`src/lib/agent/api.ts` 的 `AgentTemplate` / `isChatOnlyAgentTemplate`；`src/components/agent/agent-logo.tsx`
 
