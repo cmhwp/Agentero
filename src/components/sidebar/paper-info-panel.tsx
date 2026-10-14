@@ -703,7 +703,7 @@ export function PaperInfoPanel({
 									) : null}
 								</div>
 							) : null}
-							<div className="flex gap-1.5 px-3 pt-2">
+							<div className="px-3 pt-2">
 								<button
 									type="button"
 									onClick={() => void askOnZhihu()}
@@ -711,7 +711,7 @@ export function PaperInfoPanel({
 									title={t("paperInfo.zhihuAskHint")}
 									aria-label={t("paperInfo.zhihuAsk")}
 									className={cn(
-										"flex h-7 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border bg-background px-2",
+										"flex h-7 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md border bg-background px-2",
 										"text-xs leading-none text-muted-foreground transition-colors",
 										"hover:bg-muted hover:text-foreground",
 										"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
@@ -731,12 +731,14 @@ export function PaperInfoPanel({
 									)}
 									<span className="truncate">{t("paperInfo.zhihuAsk")}</span>
 								</button>
-								{canEditMeta ? (
+							</div>
+							{canEditMeta ? (
+								<div className="px-3 pt-2">
 									<button
 										type="button"
 										onClick={() => setEditMetaDraft(meta)}
 										className={cn(
-											"flex h-7 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border bg-background px-2",
+											"flex h-7 w-full cursor-pointer items-center justify-center gap-1.5 rounded-md border bg-background px-2",
 											"text-xs leading-none text-muted-foreground transition-colors",
 											"hover:bg-muted hover:text-foreground",
 											"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
@@ -747,8 +749,8 @@ export function PaperInfoPanel({
 											{t("paperInfo.editMeta.title")}
 										</span>
 									</button>
-								) : null}
-							</div>
+								</div>
+							) : null}
 						</div>
 					)}
 				</CollapsibleContent>
