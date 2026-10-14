@@ -463,6 +463,11 @@ export const commands = {
 	 *  managed dirs); null when the template has no managed uninstall.
 	 */
 	agentToolUninstallInfo: (templateId: string) => __TAURI_INVOKE<ApiResult<UninstallInfo | null>>("agent_tool_uninstall_info", { templateId }),
+	/**
+	 *  探测已配置的知乎 Access Secret：发起一次最小检索，成功即视为可用。
+	 *  未配置或请求失败返回 false。
+	 */
+	zhihuProbe: () => __TAURI_INVOKE<ApiResult<boolean>>("zhihu_probe"),
 	agentRunOnce: (request: RunOnceRequest_Deserialize) => typedError<ApiResult<RunOnceAccepted>, string>(__TAURI_INVOKE("agent_run_once", { request })),
 	/**  List ACP sessions for an agent via `session/list`. */
 	agentListSessions: (agentId: string | null, vaultPath: string | null, cursor: string | null) => typedError<ApiResult<AcpListSessionsResult_Serialize>, string>(__TAURI_INVOKE("agent_list_sessions", { agentId, vaultPath, cursor })),
@@ -1326,7 +1331,12 @@ export type AgentTemplate = "opencode" |
  *  Xiaomi MiMo Code CLI (an OpenCode fork) with native ACP (`mimo acp`).
  *  Docs: https://mimo.xiaomi.com · npm package `mimocode`
  */
-"mimo-code" | "custom";
+"mimo-code" | 
+/**
+ *  内置「知乎」Agent：Host 内建，不 spawn 外部进程，直连知乎开放平台
+ *  （直答 + 标题检索）。凭证来自 App settings。
+ */
+"zhihu" | "custom";
 
 /**  ACP tool call create/update for UI (`Tool` element). */
 export type AgentToolEvent = AgentToolEvent_Serialize | AgentToolEvent_Deserialize;
@@ -1449,6 +1459,8 @@ export type AppSettings_Deserialize = {
 	translatorBaseUrl?: string,
 	/**  EasyScholar key for journal ranking and impact-factor lookups. */
 	easyScholarKey?: string,
+	/**  知乎开放平台 Access Secret（内置「知乎」Agent 的直答 / 检索凭证）。 */
+	zhihuAccessSecret?: string,
 	networkProxyEnabled?: boolean,
 	networkProxyUrl?: string,
 	/**  URL-prefix GitHub mirror for Skill import fallback when GitHub is unreachable. */
@@ -1581,6 +1593,8 @@ export type AppSettings_Serialize = {
 	translatorBaseUrl: string,
 	/**  EasyScholar key for journal ranking and impact-factor lookups. */
 	easyScholarKey: string,
+	/**  知乎开放平台 Access Secret（内置「知乎」Agent 的直答 / 检索凭证）。 */
+	zhihuAccessSecret: string,
 	networkProxyEnabled: boolean,
 	networkProxyUrl: string,
 	/**  URL-prefix GitHub mirror for Skill import fallback when GitHub is unreachable. */

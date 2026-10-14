@@ -1,18 +1,19 @@
 # 知乎开放平台集成 — 设计稿
 
-> 状态：**设计稿（2026-09-14），未实现**。本文档固定讨论结论，作为后续实施的依据。
-> 范围：`features/zhihu` 后端（探测 / 安装 / 凭证 / CLI runner）、Agent 设置卡片（虚拟 Agent）、广场「知乎」面板、论文页「找知乎讨论」、划词「插入知乎引用」。
+> 状态：**部分落地（2026-10-14 起）**。已实现「内置知乎 Agent + 设置页凭证 + 直答 / 标题检索」一条薄切片，见 [../frontend/zhihu.md](../frontend/zhihu.md)、[../backend/zhihu.md](../backend/zhihu.md)。本文档其余部分（CLI 后端、广场面板、划词插引用）仍为设计稿。
+> **实现偏离 D2/D4**：首版走**直接 HTTP**（`crates/agentero-core::features::zhihu`），Access Secret 存本机 `settings.json`（redact 掩码），而非官方 `zhihu-cli` + Keychain。理由：用户要求「在配置页面配置 secret」，且首版只做直答 / 检索，直连 HTTP 更薄。CLI 后端保留为后续方向。
+> 范围：`features/zhihu` 后端、Agent 设置卡片（内置 Agent）、广场「知乎」面板、论文页「找知乎讨论」、划词「插入知乎引用」。
 > 相关：[`plaza.md`](plaza.md)、[`plaza-feeds.md`](plaza-feeds.md)、[`agent-dx.md`](agent-dx.md)、[`../frontend/index.md`](../frontend/index.md)。
-> 依赖：知乎开放平台（<https://developer.zhihu.com>）Access Secret + `zhihu-cli` 官方二进制。
+> 依赖：知乎开放平台（<https://developer.zhihu.com>）Access Secret；CLI 方案另需 `zhihu-cli` 官方二进制。
 
 ## 0. 设计决策总表
 
 | # | 议题 | 结论 |
 |---|---|---|
 | D1 | 定位 | 知乎 = **社区经验层**：arXiv/S2 给学术文献，知乎给真实讨论、解读与实践经验 |
-| D2 | 后端形态 | **统一 CLI 后端**：`features/zhihu` spawn 官方 `zhihu-cli`，不直连 HTTP、不自管鉴权 |
-| D3 | 虚拟 Agent | Agent 注册表新增 `kind: "builtin"` 条目，host 内建 ACP 适配器，大脑用知乎直答（`answer --stream`） |
-| D4 | 凭证边界 | **Agentero 永不接触 Access Secret**：stdin 传给 `auth set`，由 CLI 写 macOS Keychain / Secret Service |
+| D2 | 后端形态 | ~~统一 CLI 后端~~ **首版直接 HTTP**（core `features::zhihu`）；CLI 后端为后续方向 |
+| D3 | 虚拟 Agent | Agent 注册表新增内置条目（`template: "zhihu"`，Host 内建运行器，**非外部 ACP 进程**），大脑用知乎直答（流式 SSE） |
+| D4 | 凭证边界 | ~~Agentero 永不接触 Access Secret~~ **首版存本机 `settings.json`（0600、redact 掩码）**；CLI+Keychain 方案保留为后续 |
 | D5 | 已有 CLI 用户 | 探测官方安装目录（`~/Library/Application Support/zhihu-cli/current/`），**直接复用不重装** |
 | D6 | 安装器 | Rust 重实现官方 `setup.sh` 逻辑：公开 manifest + HTTPS + SHA-256 + size + tar 单成员 + 版本自报六重校验 |
 | D7 | 配置一次全局生效 | `ZhihuState` 单一事实源，Agent 卡片 / 广场空态 / composer Agent 选择器同步订阅 |

@@ -117,6 +117,7 @@ src-tauri/src/
 | 双链索引 | [wiki.md](wiki.md) |
 | Vault Doctor | [doctor.md](doctor.md) |
 | Agent Host | [agent.md](agent.md) |
+| 知乎接入（内置 Agent / 开放平台） | [zhihu.md](zhihu.md) |
 | 远程 Vault | [remote.md](remote.md) |
 | 云同步（S3） | [sync.md](sync.md) |
 | 搜索 | [search.md](search.md) |

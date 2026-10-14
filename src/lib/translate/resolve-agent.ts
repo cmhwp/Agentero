@@ -5,6 +5,7 @@
 import {
 	type AgentDescriptor,
 	type AgentListResponse,
+	isChatOnlyAgentTemplate,
 	listAgents,
 	loadModelPref,
 } from "@/lib/agent";
@@ -53,12 +54,20 @@ export function resolveTranslateAgent(
 	return { agentId, modelId: modelId || undefined };
 }
 
-/** Agents that can actually run (for Settings Select). */
+/**
+ * Agents that can actually run (for Settings Select).
+ *
+ * Built-in chat-only agents (e.g. the Zhihu agent) are excluded: they cannot
+ * read Vault files or run ACP prompts, so they are not valid seats for
+ * translation / PDF-ask.
+ */
 export function listAvailableAgents(
 	registry: AgentListResponse | null | undefined,
 ): AgentDescriptor[] {
 	if (!registry?.agents?.length) return [];
-	return registry.agents.filter((a) => a.available);
+	return registry.agents.filter(
+		(a) => a.available && !isChatOnlyAgentTemplate(a.template),
+	);
 }
 
 /**

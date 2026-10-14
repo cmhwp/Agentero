@@ -80,6 +80,9 @@ pub struct AppSettings {
     /// EasyScholar key for journal ranking and impact-factor lookups.
     #[serde(default)]
     pub easy_scholar_key: String,
+    /// 知乎开放平台 Access Secret（内置「知乎」Agent 的直答 / 检索凭证）。
+    #[serde(default)]
+    pub zhihu_access_secret: String,
     #[serde(default)]
     pub network_proxy_enabled: bool,
     #[serde(default = "default_network_proxy_url")]
@@ -415,6 +418,7 @@ impl Default for AppSettings {
         Self {
             translator_base_url: DEFAULT_TRANSLATOR_BASE_URL.to_string(),
             easy_scholar_key: String::new(),
+            zhihu_access_secret: String::new(),
             network_proxy_enabled: false,
             network_proxy_url: default_network_proxy_url(),
             github_mirror_enabled: false,
@@ -982,6 +986,17 @@ impl AppSettingsStore {
             Some(key.to_string())
         }
     }
+
+    /// 解析已配置的知乎 Access Secret。未配置或仍是 UI 掩码时返回 None。
+    pub fn zhihu_access_secret(&self) -> Option<String> {
+        let guard = self.inner.lock().ok()?;
+        let key = guard.zhihu_access_secret.trim();
+        if key.is_empty() || is_translate_api_key_mask(key) {
+            None
+        } else {
+            Some(key.to_string())
+        }
+    }
 }
 
 fn read_file(path: &PathBuf) -> (AppSettings, bool) {
@@ -1066,6 +1081,9 @@ fn redact_secrets(mut settings: AppSettings) -> AppSettings {
     if !settings.easy_scholar_key.trim().is_empty() {
         settings.easy_scholar_key = mask_translate_api_key(&settings.easy_scholar_key);
     }
+    if !settings.zhihu_access_secret.trim().is_empty() {
+        settings.zhihu_access_secret = mask_translate_api_key(&settings.zhihu_access_secret);
+    }
     if !settings.decision.api_key.trim().is_empty() {
         settings.decision.api_key = mask_translate_api_key(&settings.decision.api_key);
     }
@@ -1102,6 +1120,9 @@ fn merge_secrets(incoming: &mut AppSettings, previous: &AppSettings) {
     if is_translate_api_key_mask(&incoming.easy_scholar_key) {
         incoming.easy_scholar_key = previous.easy_scholar_key.clone();
     }
+    if is_translate_api_key_mask(&incoming.zhihu_access_secret) {
+        incoming.zhihu_access_secret = previous.zhihu_access_secret.clone();
+    }
     if is_translate_api_key_mask(&incoming.decision.api_key) {
         incoming.decision.api_key = previous.decision.api_key.clone();
     }
@@ -1121,6 +1142,7 @@ fn normalize(s: &mut AppSettings) {
         .to_ascii_lowercase();
     s.mcp_tunnel_api_key = s.mcp_tunnel_api_key.trim().to_string();
     s.easy_scholar_key = s.easy_scholar_key.trim().to_string();
+    s.zhihu_access_secret = s.zhihu_access_secret.trim().to_string();
     s.decision.api_key = s.decision.api_key.trim().to_string();
     let provider = s.decision.provider.trim().to_ascii_lowercase();
     s.decision.provider = if provider.is_empty() {

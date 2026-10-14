@@ -38,8 +38,20 @@ pub enum AgentTemplate {
     /// Xiaomi MiMo Code CLI (an OpenCode fork) with native ACP (`mimo acp`).
     /// Docs: https://mimo.xiaomi.com · npm package `mimocode`
     MimoCode,
+    /// 内置「知乎」Agent：Host 内建，不 spawn 外部进程，直连知乎开放平台
+    /// （直答 + 标题检索）。凭证来自 App settings。
+    Zhihu,
     Custom,
 }
+
+/// 内建 Agent（Host 内建适配器，无外部 ACP 进程）。前端聊天气泡、Settings
+/// 卡片等按此区分：这些 Agent 不经 ACP spawn / probe / session list。
+pub fn is_builtin_template(template: &AgentTemplate) -> bool {
+    matches!(template, AgentTemplate::Zhihu)
+}
+
+/// 内置「知乎」Agent 的稳定 registry id。
+pub const ZHIHU_AGENT_ID: &str = "builtin-zhihu";
 
 impl<'de> serde::Deserialize<'de> for AgentTemplate {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -64,6 +76,7 @@ impl<'de> serde::Deserialize<'de> for AgentTemplate {
             "zcode" => Self::Zcode,
             "minimax-code" => Self::MinimaxCode,
             "mimo-code" => Self::MimoCode,
+            "zhihu" => Self::Zhihu,
             "custom" => Self::Custom,
             other => {
                 return Err(serde::de::Error::custom(format!(
@@ -90,6 +103,7 @@ impl AgentTemplate {
             Self::Zcode => "zcode",
             Self::MinimaxCode => "minimax-code",
             Self::MimoCode => "mimo-code",
+            Self::Zhihu => "zhihu",
             Self::Custom => "custom",
         }
     }

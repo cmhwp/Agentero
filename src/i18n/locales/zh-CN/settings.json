@@ -281,6 +281,19 @@
 	},
 	"agent": {
 		"title": "Agent",
+		"zhihu": {
+			"section": "知乎",
+			"keyLabel": "Access Secret",
+			"placeholder": "粘贴知乎开放平台 Access Secret",
+			"confirm": "保存",
+			"clear": "清除",
+			"openKeyPage": "打开知乎开放平台个人中心",
+			"probeIdle": "未配置",
+			"probeProbing": "检测中…",
+			"probeOk": "可用",
+			"probeFail": "不可用",
+			"hint": "用于内置「知乎」Agent 的直答与标题检索。密钥仅保存在本地。"
+		},
 		"userAgent": {
 			"section": "中转站兼容",
 			"label": "User-Agent",

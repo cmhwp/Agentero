@@ -6,6 +6,7 @@ import {
 	SiHermes,
 	SiOpencode,
 	SiXiaomi,
+	SiZhihu,
 } from "react-icons/si";
 import type { AgentTemplate } from "@/lib/agent";
 import { cn } from "@/lib/core/utils";
@@ -24,6 +25,7 @@ export type AgentLogoKey =
 	| "zcode"
 	| "minimax-code"
 	| "mimo-code"
+	| "zhihu"
 	| "custom";
 
 export function agentLogoKeyForTemplate(
@@ -43,6 +45,7 @@ export function agentLogoKeyForTemplate(
 		case "zcode":
 		case "minimax-code":
 		case "mimo-code":
+		case "zhihu":
 			return template;
 		default:
 			return "custom";
@@ -112,6 +115,9 @@ export function AgentLogo({
 			break;
 		case "mimo-code":
 			icon = <SiXiaomi className={cn(iconClass, "!text-[#FF6900]")} />;
+			break;
+		case "zhihu":
+			icon = <SiZhihu className={cn(iconClass, "!text-[#0084FF]")} />;
 			break;
 		case "qodercli":
 			icon = <QoderMark className={neutralIconClass} />;

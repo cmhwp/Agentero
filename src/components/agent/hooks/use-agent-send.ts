@@ -28,8 +28,10 @@ import { formatLocaleTimestamp } from "@/i18n";
 import {
 	type AgentListResponse,
 	type AgentModeChoice,
+	agentTemplateById,
 	cancelAgentRun,
 	ensureCatalogAgent,
+	isChatOnlyAgentTemplate,
 	loadModelPref,
 	loadReasoningEffortPref,
 	type PromptImage,
@@ -670,14 +672,21 @@ export function useAgentSend({
 				activeConversationRef.current = null;
 			}
 			const target = resolveResumeTarget(options, forceNewSession);
+			// Chat-only built-in agents (e.g. the Zhihu agent) cannot read Vault
+			// files; injecting the read-instruction block would leak local paths to
+			// a third-party service, so drop the auto-added context entirely.
+			const chatOnly = isChatOnlyAgentTemplate(
+				agentTemplateById(registry, agent.agentId),
+			);
+			const turnContextPaths = chatOnly ? [] : resolvedContextPaths;
 			const plazaScratchByPath = await preparePlazaScratchFor(
-				resolvedContextPaths,
+				turnContextPaths,
 				isAcpCommand,
 			);
 			const { prompt, images, visualAnnotations, historyTitle } =
 				assembleTurnPrompt({
 					text: textRaw,
-					contextPaths: resolvedContextPaths,
+					contextPaths: turnContextPaths,
 					selections: resolvedSelections,
 					visualDrafts: resolvedVisualDrafts,
 					attachedImages,
@@ -726,7 +735,7 @@ export function useAgentSend({
 				isAcpCommand,
 				images,
 				workflow,
-				workflowTarget: resolveWorkflowTarget(resolvedContextPaths, workflow),
+				workflowTarget: resolveWorkflowTarget(turnContextPaths, workflow),
 				modelId: agent.modelId,
 				preferredEffort: agent.preferredEffort,
 				skillIds: resolvedSkillIds,

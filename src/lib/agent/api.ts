@@ -32,7 +32,30 @@ export type AgentTemplate =
 	| "zcode"
 	| "minimax-code"
 	| "mimo-code"
+	| "zhihu"
 	| "custom";
+
+/**
+ * Built-in agents that are chat-only: no Vault access, no ACP process. The
+ * composer must not inject Vault read-instructions for them (the prompt would
+ * otherwise leak local paths to a third-party service).
+ */
+const CHAT_ONLY_TEMPLATES = new Set<AgentTemplate>(["zhihu"]);
+
+export function isChatOnlyAgentTemplate(
+	template: AgentTemplate | string | null | undefined,
+): boolean {
+	return !!template && CHAT_ONLY_TEMPLATES.has(template as AgentTemplate);
+}
+
+/** Template for a registry agent id, for availability / chat-only checks. */
+export function agentTemplateById(
+	registry: { agents: AgentDescriptor[] } | null | undefined,
+	agentId: string | null | undefined,
+): AgentTemplate | undefined {
+	if (!registry || !agentId) return undefined;
+	return registry.agents.find((a) => a.id === agentId)?.template;
+}
 
 export type AgentDescriptor = {
 	id: string;

@@ -326,6 +326,11 @@ function normalizePartial(
 	} else {
 		merged.easyScholarKey = parsed.easyScholarKey.trim();
 	}
+	if (typeof parsed.zhihuAccessSecret !== "string") {
+		merged.zhihuAccessSecret = DEFAULT_SETTINGS.zhihuAccessSecret;
+	} else {
+		merged.zhihuAccessSecret = parsed.zhihuAccessSecret.trim();
+	}
 	if (typeof parsed.networkProxyEnabled !== "boolean") {
 		merged.networkProxyEnabled = DEFAULT_SETTINGS.networkProxyEnabled;
 	}
