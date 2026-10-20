@@ -1,15 +1,23 @@
-//! Library account commands. Sync itself is unchanged: these commands only
-//! store the local id→path map and register a display name with the account.
+//! Library account commands. A library with its own S3, WebDAV, or Git entry
+//! keeps that entry. Otherwise the welcome list records managed-sync quota
+//! and the sync scheduler uses the Worker library token.
 
 use std::sync::atomic::{AtomicBool, Ordering};
+
+use std::collections::BTreeMap;
+use std::path::Path;
 
 use agentero_core::features::library::{
     self, merge_libraries, LibraryRow, RecentFolder, RemoteUser,
 };
+use agentero_core::features::sync::config as sync_config;
 use agentero_core::features::sync::local::{self as vault_identity, read_vault_id};
+use agentero_core::features::sync::managed::{self, LibraryQuota};
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
+
+use crate::integration::sync::SyncService;
 
 use super::loopback::PendingSignIn;
 use super::session;
@@ -51,6 +59,10 @@ pub struct LibraryListItem {
     pub path: Option<String>,
     pub connected: bool,
     pub on_server: bool,
+    pub used_bytes: Option<u64>,
+    pub limit_bytes: Option<u64>,
+    pub cloud_mode: Option<String>,
+    pub sync_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -121,13 +133,32 @@ fn user_from(user: RemoteUser) -> LibraryUser {
     }
 }
 
-fn item_from(row: LibraryRow) -> LibraryListItem {
+fn quota_for<'a>(
+    row: &LibraryRow,
+    quota: &'a BTreeMap<String, LibraryQuota>,
+) -> Option<&'a LibraryQuota> {
+    if let Some(id) = row.id.as_ref() {
+        if let Some(recorded) = quota.get(id) {
+            return Some(recorded);
+        }
+    }
+    let path = row.path.as_deref()?;
+    let id = read_vault_id(Path::new(path))?;
+    quota.get(&id)
+}
+
+fn item_from(row: LibraryRow, quota: &BTreeMap<String, LibraryQuota>) -> LibraryListItem {
+    let recorded = quota_for(&row, quota);
     LibraryListItem {
         id: row.id,
         name: row.name,
         path: row.path,
         connected: row.connected,
         on_server: row.on_server,
+        used_bytes: recorded.map(|item| item.used_bytes),
+        limit_bytes: recorded.map(|item| item.limit_bytes),
+        cloud_mode: recorded.map(|item| item.mode.clone()),
+        sync_error: recorded.and_then(|item| item.message.clone()),
     }
 }
 
@@ -159,7 +190,13 @@ fn finish(
     plan_version: Option<i32>,
     remote_error: Option<String>,
     rows: Vec<LibraryRow>,
+    show_quota: bool,
 ) -> LibraryAccountSnapshot {
+    let quota = if show_quota {
+        managed::load_library_quota(&managed::library_quota_path())
+    } else {
+        BTreeMap::new()
+    };
     LibraryAccountSnapshot {
         signed_in,
         user,
@@ -167,7 +204,7 @@ fn finish(
         plan_key,
         plan_version,
         remote_error,
-        libraries: rows.into_iter().map(item_from).collect(),
+        libraries: rows.into_iter().map(|row| item_from(row, &quota)).collect(),
     }
 }
 
@@ -176,7 +213,7 @@ async fn snapshot(recent_paths: &[String]) -> Result<LibraryAccountSnapshot, App
     let map = library::load()?;
     let Some(token) = session::load_token()? else {
         let rows = merge_libraries(&map, &recent, None);
-        return Ok(finish(false, None, 0, None, None, None, rows));
+        return Ok(finish(false, None, 0, None, None, None, rows, false));
     };
     let origin = session::api_origin();
     let user = match library::fetch_session(&origin, &token).await {
@@ -184,12 +221,12 @@ async fn snapshot(recent_paths: &[String]) -> Result<LibraryAccountSnapshot, App
         Ok(None) => {
             session::clear_token()?;
             let rows = merge_libraries(&map, &recent, None);
-            return Ok(finish(false, None, 0, None, None, None, rows));
+            return Ok(finish(false, None, 0, None, None, None, rows, false));
         }
         Err(error) if error.code() == "unauthorized" => {
             session::clear_token()?;
             let rows = merge_libraries(&map, &recent, None);
-            return Ok(finish(false, None, 0, None, None, None, rows));
+            return Ok(finish(false, None, 0, None, None, None, rows, false));
         }
         Err(error) => {
             let rows = merge_libraries(&map, &recent, None);
@@ -201,12 +238,14 @@ async fn snapshot(recent_paths: &[String]) -> Result<LibraryAccountSnapshot, App
                 None,
                 Some(error.to_string()),
                 rows,
+                true,
             ));
         }
     };
     match library::fetch_libraries(&origin, &token).await {
         Ok(remote) => {
             let rows = merge_libraries(&map, &recent, Some(&remote.libraries));
+            refresh_managed_quota(&rows, &origin, &token).await;
             Ok(finish(
                 true,
                 user,
@@ -215,12 +254,13 @@ async fn snapshot(recent_paths: &[String]) -> Result<LibraryAccountSnapshot, App
                 remote.personal.plan_version,
                 None,
                 rows,
+                true,
             ))
         }
         Err(error) if error.code() == "unauthorized" => {
             session::clear_token()?;
             let rows = merge_libraries(&map, &recent, None);
-            Ok(finish(false, None, 0, None, None, None, rows))
+            Ok(finish(false, None, 0, None, None, None, rows, false))
         }
         Err(error) => {
             let rows = merge_libraries(&map, &recent, None);
@@ -232,8 +272,46 @@ async fn snapshot(recent_paths: &[String]) -> Result<LibraryAccountSnapshot, App
                 None,
                 Some(error.to_string()),
                 rows,
+                true,
             ))
         }
+    }
+}
+
+async fn refresh_managed_quota(rows: &[LibraryRow], origin: &str, token: &str) {
+    let quota_path = managed::library_quota_path();
+    for row in rows {
+        if !row.on_server {
+            continue;
+        }
+        let Some(path) = row.path.as_deref() else {
+            continue;
+        };
+        if sync_config::get(path).is_some() {
+            continue;
+        }
+        let dir = Path::new(path);
+        if !dir.is_dir() {
+            continue;
+        }
+        if read_vault_id(dir).is_none() {
+            if let Some(id) = &row.id {
+                let _ = managed::record_library_quota(
+                    &quota_path,
+                    id,
+                    &LibraryQuota {
+                        used_bytes: 0,
+                        limit_bytes: 0,
+                        mode: "local".into(),
+                        message: Some(
+                            "This folder has no library id in .agentero/vault.json".into(),
+                        ),
+                    },
+                );
+            }
+            continue;
+        }
+        let _ = managed::refresh_library_quota(dir, origin, token, &quota_path).await;
     }
 }
 
@@ -258,9 +336,14 @@ pub async fn library_list(
 #[specta::specta]
 pub async fn library_sign_in(
     app: AppHandle,
+    service: State<'_, SyncService>,
     args: LibraryRecentArgs,
 ) -> Result<ApiResult<LibraryAccountSnapshot>, String> {
-    command_result(sign_in(app, &args.recent_paths).await)
+    let result = sign_in(app.clone(), &args.recent_paths).await;
+    if result.is_ok() {
+        service.start_managed_libraries(&app);
+    }
+    command_result(result)
 }
 
 async fn sign_in(
@@ -297,9 +380,15 @@ async fn sign_in(
 #[tauri::command]
 #[specta::specta]
 pub async fn library_session_set(
+    app: AppHandle,
+    service: State<'_, SyncService>,
     args: LibrarySessionSetArgs,
 ) -> Result<ApiResult<LibraryAccountSnapshot>, String> {
-    command_result(set_session(args).await)
+    let result = set_session(args).await;
+    if result.is_ok() {
+        service.start_managed_libraries(&app);
+    }
+    command_result(result)
 }
 
 async fn set_session(args: LibrarySessionSetArgs) -> Result<LibraryAccountSnapshot, AppError> {
@@ -321,25 +410,37 @@ async fn set_session(args: LibrarySessionSetArgs) -> Result<LibraryAccountSnapsh
 #[tauri::command]
 #[specta::specta]
 pub async fn library_sign_out(
+    service: State<'_, SyncService>,
     args: LibraryRecentArgs,
 ) -> Result<ApiResult<LibraryAccountSnapshot>, String> {
-    command_result(sign_out(&args.recent_paths).await)
+    command_result(sign_out(&service, &args.recent_paths).await)
 }
 
-async fn sign_out(recent_paths: &[String]) -> Result<LibraryAccountSnapshot, AppError> {
+async fn sign_out(
+    service: &SyncService,
+    recent_paths: &[String],
+) -> Result<LibraryAccountSnapshot, AppError> {
+    service.stop_managed_libraries();
     if let Some(token) = session::load_token()? {
         let _ = library::sign_out(&session::api_origin(), &token).await;
     }
     session::clear_token()?;
+    let _ = managed::clear_library_quota(&managed::library_quota_path());
     snapshot(recent_paths).await
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn library_register(
+    app: AppHandle,
+    service: State<'_, SyncService>,
     args: LibraryRegisterArgs,
 ) -> Result<ApiResult<LibraryAccountSnapshot>, String> {
-    command_result(register(args).await)
+    let result = register(args).await;
+    if result.is_ok() {
+        service.start_managed_libraries(&app);
+    }
+    command_result(result)
 }
 
 async fn register(args: LibraryRegisterArgs) -> Result<LibraryAccountSnapshot, AppError> {
@@ -356,9 +457,15 @@ async fn register(args: LibraryRegisterArgs) -> Result<LibraryAccountSnapshot, A
 #[tauri::command]
 #[specta::specta]
 pub async fn library_connect(
+    app: AppHandle,
+    service: State<'_, SyncService>,
     args: LibraryConnectArgs,
 ) -> Result<ApiResult<LibraryAccountSnapshot>, String> {
-    command_result(connect(args).await)
+    let result = connect(args).await;
+    if result.is_ok() {
+        service.start_managed_libraries(&app);
+    }
+    command_result(result)
 }
 
 async fn connect(args: LibraryConnectArgs) -> Result<LibraryAccountSnapshot, AppError> {

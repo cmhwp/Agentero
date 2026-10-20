@@ -22,6 +22,10 @@ type LibraryListItem = {
 	path: string | null;
 	connected: boolean;
 	onServer: boolean;
+	usedBytes: number | null;
+	limitBytes: number | null;
+	cloudMode: string | null;
+	syncError: string | null;
 };
 
 type LibraryAccountSnapshot = {
@@ -188,6 +192,30 @@ export function LibraryPanel({
 													? displayPath(library.path)
 													: t("vault.libraries.unconnected")}
 											</p>
+											{library.syncError ? (
+												<p className="truncate text-destructive text-xs">
+													{library.syncError}
+												</p>
+											) : null}
+											{library.usedBytes != null &&
+											library.limitBytes != null ? (
+												<p className="truncate text-muted-foreground text-xs">
+													{library.cloudMode === "read"
+														? t("vault.libraries.cloudReadOnly", {
+																used: library.usedBytes,
+																limit: library.limitBytes,
+															})
+														: library.cloudMode === "local"
+															? t("vault.libraries.cloudLocal", {
+																	used: library.usedBytes,
+																	limit: library.limitBytes,
+																})
+															: t("vault.libraries.cloudUsage", {
+																	used: library.usedBytes,
+																	limit: library.limitBytes,
+																})}
+												</p>
+											) : null}
 										</div>
 										{library.connected && library.path ? (
 											<Button

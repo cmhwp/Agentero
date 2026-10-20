@@ -60,6 +60,75 @@ impl SyncService {
         for key in config::list_all().keys() {
             self.restart_scheduler(app, key);
         }
+        self.start_managed_libraries(app);
+    }
+
+    pub fn stop_managed_libraries(&self) {
+        let Ok(libraries) = agentero_core::features::library::load() else {
+            return;
+        };
+        for entry in libraries.values() {
+            if config::get(&entry.path).is_none() {
+                self.stop_scheduler(&entry.path);
+            }
+        }
+    }
+
+    /// Background sync for libraries that do not already have a user-supplied
+    /// S3, WebDAV, or Git binding. Those bindings keep their own scheduler.
+    /// Only libraries on the signed-in account are started.
+    pub fn start_managed_libraries(&self, app: &AppHandle) {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let service = app.state::<SyncService>();
+            let Some(token) = crate::features::library::session::load_token()
+                .ok()
+                .flatten()
+            else {
+                service.stop_managed_libraries();
+                return;
+            };
+            let origin = crate::features::library::session::api_origin();
+            let Ok(remote) =
+                agentero_core::features::library::fetch_libraries(&origin, &token).await
+            else {
+                return;
+            };
+            let allowed: std::collections::HashSet<String> = remote
+                .libraries
+                .into_iter()
+                .map(|library| library.id)
+                .collect();
+            let Ok(local) = agentero_core::features::library::load() else {
+                return;
+            };
+            for (id, entry) in local {
+                if config::get(&entry.path).is_some() {
+                    continue;
+                }
+                if allowed.contains(&id) {
+                    service.restart_managed(&app, &entry.path);
+                } else {
+                    service.stop_scheduler(&entry.path);
+                }
+            }
+        });
+    }
+
+    fn restart_managed(&self, app: &AppHandle, vault_key: &str) {
+        self.stop_scheduler(vault_key);
+        if config::get(vault_key).is_some() {
+            return;
+        }
+        let dir = PathBuf::from(vault_key);
+        if !dir.is_dir() {
+            return;
+        }
+        let handle =
+            tauri::async_runtime::spawn(run_loop(app.clone(), vault_key.to_string(), dir, 30));
+        if let Ok(mut map) = self.schedulers.lock() {
+            map.insert(vault_key.to_string(), handle);
+        }
     }
 
     /// Best-effort push of every auto-sync vault on app exit, bounded per

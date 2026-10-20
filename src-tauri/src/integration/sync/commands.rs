@@ -207,7 +207,7 @@ pub async fn perform_sync(
     vault_key: &str,
 ) -> Result<SyncOutcome, AppError> {
     let dir = vault_dir(vault_key)?;
-    let cfg = config::get(vault_key).ok_or_else(|| AppError::message("sync is not configured"))?;
+    let configured = config::get(vault_key);
     let lease = service
         .try_begin(vault_key)
         .ok_or_else(|| AppError::message("sync already running"))?;
@@ -225,7 +225,22 @@ pub async fn perform_sync(
             },
         );
     };
-    let result = engine::sync_vault_locked(&dir, &cfg, &progress).await;
+    let result =
+        if agentero_core::features::sync::managed::prefers_user_sync_config(configured.as_ref()) {
+            let cfg = configured.expect("user sync config");
+            engine::sync_vault_locked(&dir, &cfg, &progress).await
+        } else {
+            let token = crate::features::library::session::load_token()?
+                .ok_or_else(|| AppError::message("sync is not configured"))?;
+            agentero_core::features::sync::managed::sync_managed_library(
+                &dir,
+                &crate::features::library::session::api_origin(),
+                &token,
+                &agentero_core::features::sync::managed::library_quota_path(),
+                &progress,
+            )
+            .await
+        };
     // Terminal event consumers immediately re-read status; release first.
     drop(lease);
     match result {

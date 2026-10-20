@@ -133,6 +133,42 @@ pub async fn sync_vault_locked(
     }
 }
 
+/// Same pass as [`sync_vault`], with a store the caller already built.
+/// Managed library sync uses this so the merge and HEAD logic stay here
+/// while the desktop never reads bucket keys out of `sync.json`.
+pub async fn sync_vault_with_store<S: RemoteStore>(
+    vault: &Path,
+    cfg: &SyncBackendConfig,
+    client: &S,
+    progress: Progress<'_>,
+) -> Result<SyncOutcome, AppError> {
+    run_sync(vault, cfg, client, progress).await
+}
+
+/// [`sync_vault_with_store`] under the cross-process vault lock.
+pub async fn sync_vault_with_store_locked<S: RemoteStore>(
+    vault: &Path,
+    cfg: &SyncBackendConfig,
+    client: &S,
+    progress: Progress<'_>,
+) -> Result<SyncOutcome, AppError> {
+    let _lock = crate::features::sync::lock::SyncLock::try_acquire(vault)
+        .map_err(|e| AppError::message(format!("sync lock: {e}")))?
+        .ok_or_else(|| {
+            AppError::domain(
+                "sync_busy",
+                "another sync is already running for this vault",
+            )
+        })?;
+    match sync_vault_with_store(vault, cfg, client, progress).await {
+        Ok(outcome) => Ok(outcome),
+        Err(e) => {
+            local::record_error(vault, &e.to_string());
+            Err(e)
+        }
+    }
+}
+
 /// Engine core, generic over the storage contract: `sync_vault` plugs in the
 /// configured backend; tests can plug in an in-memory store instead.
 async fn run_sync<S: RemoteStore>(

@@ -3476,6 +3476,10 @@ export type LibraryListItem = {
 	path: string | null,
 	connected: boolean,
 	onServer: boolean,
+	usedBytes: number | null,
+	limitBytes: number | null,
+	cloudMode: string | null,
+	syncError: string | null,
 };
 
 export type LibraryRecentArgs = {

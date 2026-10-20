@@ -15,6 +15,7 @@ pub mod engine;
 pub mod git;
 pub mod local;
 mod lock;
+pub mod managed;
 mod s3;
 pub mod snapshot;
 mod store;

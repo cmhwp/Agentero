@@ -36,6 +36,7 @@ struct Draft {
     path: Option<String>,
     on_server: bool,
     cloud_bytes: u64,
+    from_saved_map: bool,
 }
 
 fn folder_name(path: &str) -> String {
@@ -76,6 +77,7 @@ pub fn merge_libraries(
                 path: Some(normalize_library_path(&entry.path)),
                 on_server: false,
                 cloud_bytes: 0,
+                from_saved_map: true,
             },
         );
     }
@@ -105,6 +107,7 @@ pub fn merge_libraries(
                     path: Some(path),
                     on_server: false,
                     cloud_bytes: 0,
+                    from_saved_map: false,
                 },
             );
             continue;
@@ -127,6 +130,7 @@ pub fn merge_libraries(
             path: Some(path),
             on_server: false,
             cloud_bytes: 0,
+            from_saved_map: false,
         });
     }
 
@@ -154,10 +158,12 @@ pub fn merge_libraries(
                         path: None,
                         on_server: true,
                         cloud_bytes: library.cloud_bytes,
+                        from_saved_map: false,
                     },
                 );
             }
         }
+        by_id.retain(|_, row| row.on_server || !row.from_saved_map);
     }
 
     let mut rows: Vec<LibraryRow> = by_id
@@ -222,6 +228,22 @@ mod tests {
         assert_eq!(rows[0].path.as_deref(), Some("/Users/me/research"));
         assert!(rows[0].connected);
         assert_eq!(rows[0].name, "Research");
+    }
+
+    #[test]
+    fn another_accounts_saved_library_is_hidden_once_this_account_loads() {
+        let mut map = BTreeMap::new();
+        map.insert("vault-a".into(), entry("/Users/me/research", "Research"));
+        map.insert("vault-b".into(), entry("/Users/me/thesis", "Thesis"));
+        let server = vec![ServerLibrary {
+            id: "vault-b".into(),
+            display_name: "Thesis".into(),
+            cloud_bytes: 0,
+        }];
+        let rows = merge_libraries(&map, &[], Some(&server));
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id.as_deref(), Some("vault-b"));
+        assert_eq!(rows[0].path.as_deref(), Some("/Users/me/thesis"));
     }
 
     #[test]

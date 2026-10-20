@@ -10,6 +10,7 @@
 
 use crate::error::AppError;
 use crate::features::sync::config::{SyncBackendConfig, SyncBackendKind};
+use crate::features::sync::managed::ManagedClient;
 use crate::features::sync::s3::S3Client;
 use crate::features::sync::webdav::WebdavClient;
 use std::future::Future;
@@ -53,6 +54,7 @@ pub trait RemoteStore: Send + Sync {
 pub enum SyncStore {
     S3(S3Client),
     Webdav(WebdavClient),
+    Managed(ManagedClient),
 }
 
 impl SyncStore {
@@ -65,6 +67,12 @@ impl SyncStore {
             )),
         }
     }
+
+    /// Managed library sync. The client already holds a library token; this
+    /// does not read `sync.json`.
+    pub fn managed(client: ManagedClient) -> Self {
+        Self::Managed(client)
+    }
 }
 
 impl RemoteStore for SyncStore {
@@ -72,6 +80,7 @@ impl RemoteStore for SyncStore {
         match self {
             Self::S3(c) => c.ensure_root().await,
             Self::Webdav(c) => c.ensure_root().await,
+            Self::Managed(c) => c.ensure_root().await,
         }
     }
 
@@ -79,6 +88,7 @@ impl RemoteStore for SyncStore {
         match self {
             Self::S3(c) => c.get(key).await,
             Self::Webdav(c) => c.get(key).await,
+            Self::Managed(c) => c.get(key).await,
         }
     }
 
@@ -91,6 +101,7 @@ impl RemoteStore for SyncStore {
         match self {
             Self::S3(c) => c.put(key, body, condition).await,
             Self::Webdav(c) => c.put(key, body, condition).await,
+            Self::Managed(c) => c.put(key, body, condition).await,
         }
     }
 
@@ -98,6 +109,7 @@ impl RemoteStore for SyncStore {
         match self {
             Self::S3(c) => c.probe_conditional_writes().await,
             Self::Webdav(c) => c.probe_conditional_writes().await,
+            Self::Managed(c) => c.probe_conditional_writes().await,
         }
     }
 }

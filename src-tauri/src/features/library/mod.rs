@@ -1,9 +1,10 @@
 //! Named libraries: keychain session plus the local id→path map.
-//! The sync engine is not involved.
+//! A library with no S3, WebDAV, or Git entry in `sync.json` syncs through
+//! the managed Worker store.
 
 #[cfg(feature = "desktop")]
 pub mod commands;
 #[cfg(feature = "desktop")]
 mod loopback;
 #[cfg(feature = "desktop")]
-mod session;
+pub(crate) mod session;
