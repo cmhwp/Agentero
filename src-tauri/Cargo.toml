@@ -38,6 +38,7 @@ desktop = [
   "dep:tauri-plugin-process",
   "dep:tauri-plugin-single-instance",
   "dep:tauri-plugin-window-state",
+  "dep:keyring",
   "dep:tauri-specta",
   "dep:specta-typescript",
   "dep:posthog-rs",
@@ -74,7 +75,7 @@ agent-client-protocol = { version = "1.2.0", features = ["unstable_elicitation"]
 tokio = { workspace = true, features = ["sync", "rt", "rt-multi-thread", "macros", "time", "process", "io-util", "net"] }
 # Per-job CancellationToken for the JobCenter cancel path (no global flag state).
 tokio-util = { version = "0.7", default-features = false }
-axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"], optional = true }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "form", "tokio"], optional = true }
 # Streamable HTTP MCP server (Settings toggle; loopback only).
 rmcp = { version = "3.1", optional = true, default-features = false, features = [
   "server",
@@ -85,6 +86,9 @@ rmcp = { version = "3.1", optional = true, default-features = false, features = 
 ] }
 schemars = { version = "1", optional = true }
 uuid = { version = "1", features = ["v4", "serde"] }
+# keyring 3 has no default features. Without a platform store it keeps the
+# session token in an in-memory mock, so the next read looks signed out.
+# Each target opts into its real store below.
 dirs = { workspace = true }
 which = "7"
 rusqlite = { version = "0.32", features = ["bundled", "backup"] }
@@ -135,6 +139,15 @@ posthog-rs = { version = "0.23", default-features = false, optional = true }
 [target.'cfg(target_os = "ios")'.dependencies]
 security-framework = "3.7"
 security-framework-sys = "2.17"
+
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+keyring = { version = "3", optional = true, features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", optional = true, features = ["windows-native"] }
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))'.dependencies]
+keyring = { version = "3", optional = true, features = ["sync-secret-service"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWindow"] }

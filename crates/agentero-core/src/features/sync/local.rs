@@ -64,6 +64,17 @@ fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Option<T> {
     serde_json::from_str(&raw).ok()
 }
 
+/// Vault UUID already written to `.agentero/vault.json`, if the folder has one.
+pub fn read_vault_id(vault: &Path) -> Option<String> {
+    let identity = read_json::<VaultIdentity>(&identity_path(vault))?;
+    let id = identity.id.trim();
+    if id.is_empty() {
+        None
+    } else {
+        Some(id.to_string())
+    }
+}
+
 /// Durable vault UUID, created on first use.
 pub fn ensure_vault_id(vault: &Path) -> Result<String, AppError> {
     if let Some(identity) = read_json::<VaultIdentity>(&identity_path(vault)) {

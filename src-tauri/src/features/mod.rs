@@ -20,6 +20,9 @@ pub mod host_hooks;
 #[cfg(feature = "desktop")]
 pub mod jobs;
 
+#[cfg(feature = "desktop")]
+pub mod library;
+
 pub mod lifecycle;
 
 #[path = "../app/open_request/mod.rs"]

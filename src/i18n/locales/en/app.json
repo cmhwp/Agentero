@@ -194,7 +194,23 @@
 		"runTauriPrefix": "Run the app with",
 		"runTauriSuffix": "to open a vault.",
 		"skillsSeeded": "Installed {{count}} new skill(s): {{names}}",
-		"skillsUpdated": "Updated {{count}} bundled skill(s): {{names}}"
+		"skillsUpdated": "Updated {{count}} bundled skill(s): {{names}}",
+		"libraries": {
+			"signIn": "Sign in",
+			"signOut": "Sign out",
+			"signingIn": "Waiting for the browser…",
+			"signedInAs": "Signed in as {{name}}",
+			"cloudQuota": "Cloud quota: {{bytes}} bytes",
+			"title": "Libraries",
+			"add": "Add library",
+			"namePlaceholder": "Library name",
+			"chooseFolder": "Choose folder…",
+			"unconnected": "Choose a local folder",
+			"pasteToggle": "Paste session token",
+			"pastePlaceholder": "Session token",
+			"pasteSubmit": "Use token",
+			"empty": "No libraries yet."
+		}
 	},
 	"confirm": {
 		"createNote": "「{{target}}」 does not exist.\n\nCreate {{path}}?"

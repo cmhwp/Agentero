@@ -7,6 +7,7 @@ import {
 	RemoteVaultDialog,
 } from "@/components/dialogs/remote-vault-dialog";
 import { Button } from "@/components/ui/button";
+import { LibraryPanel } from "@/components/shell/library-panel";
 import { displayPath } from "@/lib/core/path";
 import { cn } from "@/lib/core/utils";
 import { vaultDisplayName } from "@/lib/vault";
@@ -97,6 +98,7 @@ export function VaultWelcome({
 	const { t } = useTranslation(["app", "sidebar"]);
 	const [remoteOpen, setRemoteOpen] = useState(false);
 	const [connecting, setConnecting] = useState(false);
+	const [signedIn, setSignedIn] = useState(false);
 	const [recentRemotes, setRecentRemotes] = useState<RecentRemoteVault[]>(() =>
 		getRecentRemoteVaults(),
 	);
@@ -166,7 +168,15 @@ export function VaultWelcome({
 					</Button>
 				</div>
 
-				{recentVaults.length > 0 || recentRemotes.length > 0 ? (
+				<LibraryPanel
+					recentVaults={recentVaults}
+					busy={busy}
+					onOpenPath={onOpenRecent}
+					onSignedInChange={setSignedIn}
+				/>
+
+				{!signedIn &&
+					(recentVaults.length > 0 || recentRemotes.length > 0 ? (
 					<div className="overflow-hidden rounded-lg border bg-background shadow-sm">
 						<div className="border-b px-3 py-2">
 							<p className="font-medium text-muted-foreground text-xs">
@@ -228,7 +238,7 @@ export function VaultWelcome({
 					<p className="text-center text-muted-foreground text-sm">
 						{t("vault.recentEmpty")}
 					</p>
-				)}
+				))}
 			</div>
 
 			<RemoteVaultDialog

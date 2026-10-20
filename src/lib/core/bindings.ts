@@ -550,6 +550,12 @@ export const commands = {
 	/**  One full sync pass (manual trigger from the settings pane). */
 	syncNow: (args: SyncVaultArgs) => typedError<ApiResult<SyncOutcome>, string>(__TAURI_INVOKE("sync_now", { args })),
 	syncScopeSizes: (args: SyncVaultArgs) => typedError<ApiResult<SyncScopeSizes>, string>(__TAURI_INVOKE("sync_scope_sizes", { args })),
+	libraryList: (args: LibraryRecentArgs) => typedError<ApiResult<LibraryAccountSnapshot>, string>(__TAURI_INVOKE("library_list", { args })),
+	librarySignIn: (args: LibraryRecentArgs) => typedError<ApiResult<LibraryAccountSnapshot>, string>(__TAURI_INVOKE("library_sign_in", { args })),
+	librarySessionSet: (args: LibrarySessionSetArgs) => typedError<ApiResult<LibraryAccountSnapshot>, string>(__TAURI_INVOKE("library_session_set", { args })),
+	librarySignOut: (args: LibraryRecentArgs) => typedError<ApiResult<LibraryAccountSnapshot>, string>(__TAURI_INVOKE("library_sign_out", { args })),
+	libraryRegister: (args: LibraryRegisterArgs) => typedError<ApiResult<LibraryAccountSnapshot>, string>(__TAURI_INVOKE("library_register", { args })),
+	libraryConnect: (args: LibraryConnectArgs) => typedError<ApiResult<LibraryAccountSnapshot>, string>(__TAURI_INVOKE("library_connect", { args })),
 	/**
 	 *  Start (or restart) watching `vault_path` for this window. Emits
 	 *  `vault:file-changed` to this window when files change on disk.
@@ -3418,6 +3424,16 @@ export type LayoutSettings = {
 	providerConfigs?: { [key in string]: LayoutProviderConfig },
 };
 
+export type LibraryAccountSnapshot = {
+	signedIn: boolean,
+	user: LibraryUser | null,
+	personalCloudBytes: number,
+	planKey: string | null,
+	planVersion: number | null,
+	remoteError: string | null,
+	libraries: LibraryListItem[],
+};
+
 export type LibraryCitingScanArgs = {
 	vaultPath: string,
 	/**  Background-task id: routes progress events and carries cancellation. */
@@ -3445,6 +3461,42 @@ export type LibraryColumnPref_Serialize = {
 	key: string,
 	visible: boolean,
 	widthRem?: number | null,
+};
+
+export type LibraryConnectArgs = {
+	id: string,
+	path: string,
+	name: string,
+	recentPaths: string[],
+};
+
+export type LibraryListItem = {
+	id: string | null,
+	name: string,
+	path: string | null,
+	connected: boolean,
+	onServer: boolean,
+};
+
+export type LibraryRecentArgs = {
+	recentPaths: string[],
+};
+
+export type LibraryRegisterArgs = {
+	path: string,
+	displayName: string,
+	recentPaths: string[],
+};
+
+export type LibrarySessionSetArgs = {
+	token: string,
+	recentPaths: string[],
+};
+
+export type LibraryUser = {
+	id: string,
+	name: string,
+	email: string,
 };
 
 export type LinkFragment = { kind: "heading"; path: string[] } | { kind: "block"; id: string } | 

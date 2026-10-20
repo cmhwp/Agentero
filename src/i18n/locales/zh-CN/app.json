@@ -194,7 +194,23 @@
 		"runTauriPrefix": "运行",
 		"runTauriSuffix": "以打开知识库。",
 		"skillsSeeded": "已安装 {{count}} 个新技能：{{names}}",
-		"skillsUpdated": "已更新 {{count}} 个内置技能：{{names}}"
+		"skillsUpdated": "已更新 {{count}} 个内置技能：{{names}}",
+		"libraries": {
+			"signIn": "登录",
+			"signOut": "退出登录",
+			"signingIn": "正在等待浏览器…",
+			"signedInAs": "已登录：{{name}}",
+			"cloudQuota": "云空间配额：{{bytes}} 字节",
+			"title": "库",
+			"add": "添加库",
+			"namePlaceholder": "库名称",
+			"chooseFolder": "选择文件夹…",
+			"unconnected": "选择一个本地文件夹",
+			"pasteToggle": "粘贴会话令牌",
+			"pastePlaceholder": "会话令牌",
+			"pasteSubmit": "使用令牌",
+			"empty": "还没有库。"
+		}
 	},
 	"confirm": {
 		"createNote": "「{{target}}」不存在。\n\n是否创建 {{path}}？"
