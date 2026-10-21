@@ -8,7 +8,8 @@ import {
 	HIGHLIGHT_OPACITY,
 	normalizeHighlightColor,
 } from "@/lib/pdf/highlight/palette";
-import { deleteMarkFile } from "@/lib/pdf/selection/marks-io";
+import { MARKS_FOLDER } from "@/lib/pdf/selection/marks-io";
+import { joinVaultPath, removeVaultPath } from "@/lib/vault";
 
 function unionRect(rects: Rect[]): Rect | null {
 	if (!rects.length) return null;
@@ -75,7 +76,12 @@ export async function migrateHighlightMarks(
 
 	for (const id of migratedIds) {
 		try {
-			await deleteMarkFile(paperAbsPath, id);
+			await removeVaultPath(
+				joinVaultPath(
+					joinVaultPath(paperAbsPath, MARKS_FOLDER),
+					`${id}.json`,
+				),
+			);
 		} catch {
 			// leaving a stale mark is harmless; ignore
 		}

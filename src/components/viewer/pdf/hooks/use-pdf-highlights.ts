@@ -41,7 +41,6 @@ import {
 import { isLinkObject } from "@/components/viewer/pdf/layers/citation-links";
 import type { PdfViewerProps } from "@/components/viewer/pdf/types";
 import {
-	ANNOTATIONS_FILE,
 	type HighlightCustom,
 	hasAnnotationsFile,
 	highlightViewFromObject,
@@ -62,7 +61,7 @@ import type { NormalizedRect } from "@/lib/pdf/selection";
 import { marksDir } from "@/lib/pdf/selection";
 import { isRecentSelfWrite } from "@/lib/pdf/selection/marks-io";
 import { listenVaultFileChangedGated } from "@/lib/vault/file-change-gate";
-import { joinVaultPath, normalizePathKey } from "@/lib/vault/path";
+import { normalizePathKey } from "@/lib/vault/path";
 
 /** Coalesce annotation bursts (drag-create, multi-page highlight) into one export. */
 const HIGHLIGHT_SAVE_DEBOUNCE_MS = 600;
@@ -330,9 +329,7 @@ export function usePdfHighlights({
 	// nor keep them: its next debounced export would overwrite the file.
 	useEffect(() => {
 		if (!paperAbsPath || !annotationCap || totalPages <= 0) return;
-		const target = normalizePathKey(
-			joinVaultPath(marksDir(paperAbsPath), ANNOTATIONS_FILE),
-		);
+		const marksPrefix = normalizePathKey(marksDir(paperAbsPath));
 		let cancelled = false;
 		let burstTimer: number | null = null;
 
@@ -372,7 +369,10 @@ export function usePdfHighlights({
 			if (payload.rename) {
 				paths.push(payload.rename.from, payload.rename.to);
 			}
-			const hit = paths.filter((p) => normalizePathKey(p) === target);
+			const hit = paths.filter((p) => {
+				const key = normalizePathKey(p);
+				return key === marksPrefix || key.startsWith(`${marksPrefix}/`);
+			});
 			if (!hit.length) return;
 			if (hit.every((p) => isRecentSelfWrite(p))) return;
 			schedule();

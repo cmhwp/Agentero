@@ -4,8 +4,14 @@
 //! (tags, is_read, urls, …) is projected into this file so a catalog row can
 //! be rebuilt from disk alone. This keeps the vault self-contained (backup /
 //! sync tools only need plain files) and honors local-first.
+//!
+//! An `org_shared` library keeps bibliography and public tags here. The
+//! signed-in member's `is_read` lives in `.readers/{userId}.json` instead, so
+//! one member's read flag is not group state.
 
 use super::papers::PaperRecord;
+use crate::features::library::{layout_for, MemberLayout};
+use serde_json::Value;
 use std::fs;
 use std::path::Path;
 
@@ -15,13 +21,41 @@ pub const SIDECAR_FILE: &str = "metadata.json";
 /// Best-effort: catalog write already succeeded; a failed projection only
 /// logs (next upsert rewrites it).
 pub fn write_sidecar(vault_root: &Path, record: &PaperRecord) {
+    project_sidecar(vault_root, record, &layout_for(vault_root));
+}
+
+/// Project `record` using an explicit layout. Shared libraries omit `is_read`.
+pub fn project_sidecar(vault_root: &Path, record: &PaperRecord, layout: &MemberLayout) {
     let dir = vault_root.join(&record.path);
     if !dir.is_dir() {
         return;
     }
-    let write = || -> std::io::Result<()> {
-        let raw = serde_json::to_vec_pretty(record)?;
-        crate::fs::atomic_write(&dir.join(SIDECAR_FILE), &raw)
+    if layout.shared {
+        if let Some(user_id) = layout.user_id.as_deref() {
+            if let Err(error) = super::readers::migrate_paper(vault_root, &record.path, user_id) {
+                log::warn!(
+                    target: "agentero::catalog",
+                    "failed to migrate read flag for {}: {error}",
+                    record.path
+                );
+            }
+        }
+    }
+    let write = || -> Result<(), Box<dyn std::error::Error>> {
+        let mut value = serde_json::to_value(record)?;
+        if layout.shared {
+            if let Some(obj) = value.as_object_mut() {
+                obj.remove("is_read");
+                if layout.user_id.is_none() {
+                    if let Some(flag) = existing_is_read(vault_root, &record.path) {
+                        obj.insert("is_read".into(), flag);
+                    }
+                }
+            }
+        }
+        let raw = serde_json::to_vec_pretty(&value)?;
+        crate::fs::atomic_write(&dir.join(SIDECAR_FILE), &raw)?;
+        Ok(())
     };
     if let Err(e) = write() {
         log::warn!(
@@ -30,6 +64,12 @@ pub fn write_sidecar(vault_root: &Path, record: &PaperRecord) {
             record.path
         );
     }
+}
+
+fn existing_is_read(vault_root: &Path, rel: &str) -> Option<Value> {
+    let text = fs::read_to_string(vault_root.join(rel).join(SIDECAR_FILE)).ok()?;
+    let value: Value = serde_json::from_str(&text).ok()?;
+    value.get("is_read").cloned()
 }
 
 /// Read `{vault}/{rel_path}/metadata.json` as a catalog row.
@@ -96,6 +136,37 @@ mod tests {
         assert_eq!(loaded.paper_type, PaperKind::Doi);
         assert_eq!(loaded.tags.len(), 1);
         assert_eq!(loaded.tags[0].name, "nlp");
+        let _ = fs::remove_dir_all(&vault);
+    }
+
+    #[test]
+    fn shared_sidecar_omits_is_read_and_keeps_bibliography() {
+        let vault =
+            std::env::temp_dir().join(format!("agentero-sidecar-shared-{}", Uuid::new_v4()));
+        fs::create_dir_all(vault.join("papers/x")).unwrap();
+        let mut record = minimal_record("papers/x");
+        record.is_read = true;
+        record.title = "Attention".into();
+        project_sidecar(
+            &vault,
+            &record,
+            &crate::features::library::MemberLayout {
+                shared: true,
+                user_id: Some("user-a".into()),
+            },
+        );
+        let raw = fs::read_to_string(vault.join("papers/x/metadata.json")).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert!(value.get("is_read").is_none());
+        assert_eq!(value["title"], "Attention");
+        let personal = minimal_record("papers/x");
+        project_sidecar(
+            &vault,
+            &personal,
+            &crate::features::library::MemberLayout::personal(),
+        );
+        let again = read_sidecar(&vault, "papers/x").unwrap();
+        assert!(!again.is_read);
         let _ = fs::remove_dir_all(&vault);
     }
 }

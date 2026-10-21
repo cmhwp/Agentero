@@ -5,6 +5,7 @@
 
 pub mod move_paper;
 pub mod papers;
+pub mod readers;
 mod schema;
 pub mod sidecar;
 

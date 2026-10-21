@@ -8,6 +8,7 @@ import { callApiResult } from "@/lib/core/ipc";
 import { displayPath } from "@/lib/core/path";
 import { notifyError } from "@/lib/core/notify";
 import { errorText } from "@/lib/core/error";
+import { invalidateMemberLayout } from "@/lib/library/member-layout";
 import { pickVaultDirectory } from "@/lib/vault/pick";
 
 type LibraryUser = {
@@ -70,13 +71,18 @@ export function LibraryPanel({
 	const [showPaste, setShowPaste] = useState(false);
 	const [token, setToken] = useState("");
 
+	const apply = (snapshot: LibraryAccountSnapshot) => {
+		invalidateMemberLayout();
+		setAccount(snapshot);
+		onSignedInChange(snapshot.signedIn);
+		return snapshot;
+	};
+
 	const refresh = async () => {
 		const snapshot = await callApiResult(() =>
 			commands.libraryList({ recentPaths: recentVaults }),
 		);
-		setAccount(snapshot);
-		onSignedInChange(snapshot.signedIn);
-		return snapshot;
+		return apply(snapshot);
 	};
 
 	useEffect(() => {
@@ -86,8 +92,7 @@ export function LibraryPanel({
 		)
 			.then((snapshot) => {
 				if (cancelled) return;
-				setAccount(snapshot);
-				onSignedInChange(snapshot.signedIn);
+				apply(snapshot);
 			})
 			.catch((error) => {
 				if (!cancelled) notifyError(errorText(error));
@@ -100,9 +105,7 @@ export function LibraryPanel({
 	const run = async (action: () => Promise<LibraryAccountSnapshot>) => {
 		setPending(true);
 		try {
-			const snapshot = await action();
-			setAccount(snapshot);
-			onSignedInChange(snapshot.signedIn);
+			apply(await action());
 		} catch (error) {
 			notifyError(errorText(error));
 		} finally {

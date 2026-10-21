@@ -2,3 +2,4 @@
 
 pub mod activity;
 pub mod doctor;
+pub mod files;

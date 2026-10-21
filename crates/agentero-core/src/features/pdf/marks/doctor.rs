@@ -60,6 +60,22 @@ fn walk_mark_json_files(vault: &Path) -> Vec<PathBuf> {
         };
         for file in files.flatten() {
             let path = file.path();
+            if path.is_dir() {
+                let Ok(nested) = fs::read_dir(&path) else {
+                    continue;
+                };
+                for child in nested.flatten() {
+                    let child_path = child.path();
+                    let name = child_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("");
+                    if name.ends_with(".json") && name != "annotations.json" {
+                        out.push(child_path);
+                    }
+                }
+                continue;
+            }
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if name.ends_with(".json") && name != "annotations.json" {
                 out.push(path);

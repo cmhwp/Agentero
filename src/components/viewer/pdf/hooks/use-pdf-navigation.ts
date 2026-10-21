@@ -10,6 +10,9 @@
 
 import type { useScroll } from "@embedpdf/plugin-scroll/react";
 import { type RefObject, useEffect, useRef, useState } from "react";
+import { commands } from "@/lib/core/bindings";
+import { callApi } from "@/lib/core/ipc";
+import { memberLayout } from "@/lib/library/member-layout";
 import {
 	clearPendingPdfPage,
 	consumePendingPdfPage,
@@ -25,6 +28,10 @@ type ScrollCapability = ReturnType<typeof useScroll>["provides"];
 export type UsePdfNavigationOptions = {
 	/** Stable per-paper key for the stored reading position (null = no memory). */
 	paperKey: string | null;
+	/** Connected library folder. Shared reading position is stored per member. */
+	vaultPath?: string | null;
+	/** Vault-relative paper folder. Required to read or write the shared position. */
+	paperRelPath?: string | null;
 	currentPage: number;
 	totalPages: number;
 	scroll: ScrollCapability;
@@ -46,8 +53,42 @@ export type PdfNavigation = {
 	commitPageField: () => void;
 };
 
+async function sharedReadingPage(
+	vaultPath: string,
+	paperRelPath: string,
+): Promise<number | null> {
+	const layout = await memberLayout(vaultPath);
+	if (!layout.shared || !layout.userId) return null;
+	try {
+		const data = await callApi(() =>
+			commands.paperReadingPageGet({
+				vaultPath,
+				path: paperRelPath,
+			}),
+		);
+		return data.page > 1 ? data.page : 0;
+	} catch {
+		return 0;
+	}
+}
+
+function restoreSavedPage(
+	scrollScope: ScrollCapability,
+	page: number,
+	totalPages: number,
+): void {
+	if (page > 1 && page <= totalPages) {
+		scrollScope.scrollToPage({
+			pageNumber: page,
+			behavior: "instant",
+		});
+	}
+}
+
 export function usePdfNavigation({
 	paperKey,
+	vaultPath = null,
+	paperRelPath = null,
 	currentPage,
 	totalPages,
 	scroll,
@@ -104,26 +145,63 @@ export function usePdfNavigation({
 			// Viewport metrics may not be available yet; fall through and restore.
 		}
 
-		restoredRef.current = true;
-		if (paperKey) {
-			const saved = readReadingPage(paperKey);
-			if (saved && saved > 1 && saved <= totalPages) {
-				scrollScope.scrollToPage({
-					pageNumber: saved,
-					behavior: "instant",
-				});
+		if (!(vaultPath && paperRelPath)) {
+			restoredRef.current = true;
+			if (paperKey) {
+				restoreSavedPage(scrollScope, readReadingPage(paperKey), totalPages);
 			}
+			return;
 		}
-	}, [totalPages, scrollReady, paperKey]);
+
+		let cancelled = false;
+		void (async () => {
+			const shared = await sharedReadingPage(vaultPath, paperRelPath);
+			if (cancelled || restoredRef.current) return;
+			try {
+				const metrics = scrollRef.current?.getMetrics();
+				if (metrics && metrics.currentPage > 1) {
+					restoredRef.current = true;
+					return;
+				}
+			} catch {
+				// Viewport metrics may not be available yet.
+			}
+			restoredRef.current = true;
+			const saved =
+				shared ?? (paperKey ? readReadingPage(paperKey) : 0);
+			restoreSavedPage(scrollScope, saved, totalPages);
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [totalPages, scrollReady, paperKey, vaultPath, paperRelPath]);
 
 	// Persist the last read page (debounced) as the user scrolls.
 	useEffect(() => {
 		if (!paperKey || !restoredRef.current || currentPage < 1) return;
 		const id = setTimeout(() => {
+			if (vaultPath && paperRelPath) {
+				void memberLayout(vaultPath).then((layout) => {
+					if (layout.shared && layout.userId) {
+						void callApi(() =>
+							commands.paperReadingPageSet({
+								vaultPath,
+								path: paperRelPath,
+								page: currentPage,
+							}),
+						).catch(() => {
+							// Unsigned or offline: leave the local position unchanged.
+						});
+						return;
+					}
+					writeReadingPage(paperKey, currentPage);
+				});
+				return;
+			}
 			writeReadingPage(paperKey, currentPage);
 		}, READING_POSITION_SAVE_MS);
 		return () => clearTimeout(id);
-	}, [paperKey, currentPage]);
+	}, [paperKey, currentPage, vaultPath, paperRelPath]);
 
 	const goToPage = (n: number) => {
 		if (!scroll || totalPages <= 0) return;

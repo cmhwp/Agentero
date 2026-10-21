@@ -250,7 +250,34 @@ fn finish(
     }
 }
 
+fn remember_roster(libraries: &[agentero_core::features::library::ServerLibrary]) {
+    let updates: Vec<(String, Option<String>)> = libraries
+        .iter()
+        .map(|library| (library.id.clone(), library.billing_source.clone()))
+        .collect();
+    if let Err(error) = library::remember_billing_sources(&updates) {
+        log::warn!(target: "agentero::library", "could not remember billing source: {error}");
+    }
+}
+
+async fn migrate_shared_libraries() {
+    match tauri::async_runtime::spawn_blocking(|| {
+        agentero_core::features::catalog::readers::migrate_known_shared_libraries()
+    })
+    .await
+    {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => {
+            log::warn!(target: "agentero::library", "shared library migration: {error}");
+        }
+        Err(error) => {
+            log::warn!(target: "agentero::library", "shared library migration: {error}");
+        }
+    }
+}
+
 async fn snapshot(recent_paths: &[String]) -> Result<LibraryAccountSnapshot, AppError> {
+    let _ = session::hydrate_account_id();
     let recent = recent_folders(recent_paths);
     let map = library::load()?;
     let Some(token) = session::load_token()? else {
@@ -269,9 +296,15 @@ async fn snapshot(recent_paths: &[String]) -> Result<LibraryAccountSnapshot, App
     };
     let origin = session::api_origin();
     let user = match library::fetch_session(&origin, &token).await {
-        Ok(Some(user)) => Some(user_from(user)),
+        Ok(Some(user)) => {
+            if let Err(error) = session::store_user_id(&user.id) {
+                log::warn!(target: "agentero::library", "could not store account id: {error}");
+            }
+            Some(user_from(user))
+        }
         Ok(None) => {
             session::clear_token()?;
+            let _ = session::clear_user_id();
             let rows = merge_libraries(&map, &recent, None);
             return Ok(finish(
                 false,
@@ -287,6 +320,7 @@ async fn snapshot(recent_paths: &[String]) -> Result<LibraryAccountSnapshot, App
         }
         Err(error) if error.code() == "unauthorized" => {
             session::clear_token()?;
+            let _ = session::clear_user_id();
             let rows = merge_libraries(&map, &recent, None);
             return Ok(finish(
                 false,
@@ -317,6 +351,8 @@ async fn snapshot(recent_paths: &[String]) -> Result<LibraryAccountSnapshot, App
     };
     match library::fetch_libraries(&origin, &token).await {
         Ok(remote) => {
+            remember_roster(&remote.libraries);
+            migrate_shared_libraries().await;
             let organizations = remote.organizations.into_iter().map(org_from).collect();
             let rows = merge_libraries(&map, &recent, Some(&remote.libraries));
             refresh_managed_quota(&rows, &origin, &token).await;
@@ -334,6 +370,7 @@ async fn snapshot(recent_paths: &[String]) -> Result<LibraryAccountSnapshot, App
         }
         Err(error) if error.code() == "unauthorized" => {
             session::clear_token()?;
+            let _ = session::clear_user_id();
             let rows = merge_libraries(&map, &recent, None);
             Ok(finish(
                 false,
@@ -625,4 +662,57 @@ async fn connect(args: LibraryConnectArgs) -> Result<LibraryAccountSnapshot, App
     }
     library::upsert(&id, &args.path, &name)?;
     snapshot(&args.recent_paths).await
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryPathArgs {
+    /// Vault folder, or any file or folder inside it.
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryMemberLayout {
+    pub shared: bool,
+    pub user_id: Option<String>,
+}
+
+fn vault_root_for(path: &Path) -> std::path::PathBuf {
+    let mut current = if path.is_file() {
+        path.parent().unwrap_or(path)
+    } else {
+        path
+    };
+    loop {
+        if current.join(".agentero").join("vault.json").is_file() {
+            return current.to_path_buf();
+        }
+        match current.parent() {
+            Some(parent) => current = parent,
+            None => return path.to_path_buf(),
+        }
+    }
+}
+
+/// Whether `path` belongs to an `org_shared` library, and the signed-in account id.
+#[tauri::command]
+#[specta::specta]
+pub async fn library_member_layout(
+    args: LibraryPathArgs,
+) -> Result<ApiResult<LibraryMemberLayout>, String> {
+    command_result(
+        (|| async {
+            if let Err(error) = session::ensure_account_id().await {
+                log::warn!(target: "agentero::library", "account id: {error}");
+            }
+            let vault = vault_root_for(Path::new(args.path.trim()));
+            let layout = library::layout_for(&vault);
+            Ok(LibraryMemberLayout {
+                shared: layout.shared,
+                user_id: layout.user_id,
+            })
+        })()
+        .await,
+    )
 }

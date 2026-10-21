@@ -11,9 +11,6 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
 
-/// Aggregate EmbedPDF annotations file under `marks/` (not a per-id mark).
-const ANNOTATIONS_JSON: &str = "annotations.json";
-
 /// Minimal activity point mirrored by `ReadingActivityPoint` in
 /// `src/lib/paper/reading-heatmap/types.ts`.
 #[derive(Debug, Clone, Serialize, PartialEq, specta::Type)]
@@ -170,18 +167,9 @@ fn point_from_mark(raw: &Value) -> Option<ReadingActivityPoint> {
 /// Missing folder, unreadable files, and corrupt JSON are skipped silently
 /// (same behavior as the renderer's `listMarkRaw`).
 fn read_paper_activity(paper_dir: &Path) -> Vec<ReadingActivityPoint> {
-    let marks = paper_dir.join("marks");
-    let Ok(entries) = std::fs::read_dir(&marks) else {
-        return Vec::new();
-    };
     let mut points = Vec::new();
-    for entry in entries.flatten() {
-        let name = entry.file_name();
-        let Some(name) = name.to_str() else { continue };
-        if !name.ends_with(".json") || name == ANNOTATIONS_JSON {
-            continue;
-        }
-        let Ok(text) = std::fs::read_to_string(entry.path()) else {
+    for file in super::files::list_mark_files(paper_dir) {
+        let Ok(text) = std::fs::read_to_string(&file.path) else {
             continue;
         };
         let Ok(raw) = serde_json::from_str::<Value>(&text) else {

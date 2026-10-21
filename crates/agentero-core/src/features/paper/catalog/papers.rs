@@ -402,7 +402,11 @@ pub fn upsert_paper(vault_root: &Path, record: &PaperRecord) -> Result<PaperReco
 
 pub fn get_by_path(vault_root: &Path, path: &str) -> Result<Option<PaperRecord>, AppError> {
     let path = crate::fs::normalize_rel_separators(path);
-    with_catalog(vault_root, |conn| get_conn(conn, &path))
+    let mut row = with_catalog(vault_root, |conn| get_conn(conn, &path))?;
+    if let Some(row) = row.as_mut() {
+        overlay_member_read(vault_root, std::slice::from_mut(row));
+    }
+    Ok(row)
 }
 
 /// First paper with the given logical `id` (ordered by path). For ambiguity, use [`list_by_id`].
@@ -424,11 +428,12 @@ pub fn list_by_id(vault_root: &Path, id: &str) -> Result<Vec<PaperRecord>, AppEr
             ))
             .map_err(AppError::from)?;
 
-        let rows = stmt
+        let mut rows = stmt
             .query_map(params![id], map_row)
             .map_err(AppError::from)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(AppError::from)?;
+        overlay_member_read(vault_root, &mut rows);
         Ok(rows)
     })
 }
@@ -538,7 +543,9 @@ pub fn find_by_identifier(
 
 /// List all papers for library table (newest first).
 pub fn list_all(vault_root: &Path) -> Result<Vec<PaperRecord>, AppError> {
-    with_catalog(vault_root, list_all_conn)
+    let mut rows = with_catalog(vault_root, list_all_conn)?;
+    overlay_member_read(vault_root, &mut rows);
+    Ok(rows)
 }
 
 /// Read all papers from an already-open Catalog connection.
@@ -682,7 +689,35 @@ pub fn find_duplicates_conn(
 /// rows caused by old bugs or manual folder copies without deleting anything.
 pub fn list_all_unique_by_id(vault_root: &Path) -> Result<Vec<PaperRecord>, AppError> {
     let rows = with_catalog(vault_root, list_all_conn)?;
-    Ok(dedupe_records_by_id(vault_root, rows))
+    let mut rows = dedupe_records_by_id(vault_root, rows);
+    overlay_member_read(vault_root, &mut rows);
+    Ok(rows)
+}
+
+/// Shared libraries show `is_read` only from the signed-in member's reader
+/// file. With nobody signed in, metadata `is_read` is not the current user.
+fn overlay_member_read(vault: &Path, rows: &mut [PaperRecord]) {
+    let layout = crate::features::library::layout_for(vault);
+    if !layout.shared {
+        return;
+    }
+    for row in rows {
+        row.is_read = member_is_read(vault, &row.path, &layout);
+    }
+}
+
+pub fn member_is_read(
+    vault: &Path,
+    rel: &str,
+    layout: &crate::features::library::MemberLayout,
+) -> bool {
+    if !layout.shared {
+        return false;
+    }
+    let Some(user_id) = layout.user_id.as_deref() else {
+        return false;
+    };
+    super::readers::read_is_read(vault, rel, user_id)
 }
 
 fn dedupe_records_by_id(vault_root: &Path, rows: Vec<PaperRecord>) -> Vec<PaperRecord> {
@@ -853,6 +888,12 @@ pub fn repair_duplicates(vault_root: &Path) -> Result<DuplicateRepairResult, App
 /// folder-name record) and rows whose sidecar is newer are refreshed.
 /// Returns the count of rows written.
 pub fn rebuild_from_disk(vault_root: &Path) -> Result<usize, AppError> {
+    let layout = crate::features::library::layout_for(vault_root);
+    if layout.shared {
+        if let Err(error) = super::readers::migrate_library(vault_root, &layout) {
+            log::warn!(target: "agentero::catalog", "shared read migration: {error}");
+        }
+    }
     let papers_dir = vault_root.join("papers");
     if !papers_dir.is_dir() {
         return Ok(0);
@@ -881,11 +922,26 @@ pub fn rebuild_from_disk(vault_root: &Path) -> Result<usize, AppError> {
                         {
                             Some(sc)
                         }
-                        (Some(_), _) => None,
+                        (Some(mut row), _) => {
+                            if layout.shared {
+                                let flag = member_is_read(vault_root, &rel_path, &layout);
+                                if row.is_read != flag {
+                                    row.is_read = flag;
+                                    Some(row)
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        }
                         (None, Some(sc)) => Some(sc),
                         (None, None) => Some(minimal_record_for(&dir, &rel_path)),
                     };
-                    if let Some(record) = next {
+                    if let Some(mut record) = next {
+                        if layout.shared {
+                            record.is_read = member_is_read(vault_root, &rel_path, &layout);
+                        }
                         if upsert_conn(conn, &record).is_ok() {
                             count += 1;
                         }
@@ -916,14 +972,18 @@ pub fn ensure_row_for_path(
     rel_path: &str,
 ) -> Result<Option<PaperRecord>, AppError> {
     let rel_path = crate::fs::normalize_rel_separators(rel_path);
-    with_catalog(vault_root, |conn| {
+    let mut row = with_catalog(vault_root, |conn| {
         if let Some(row) = get_conn(conn, &rel_path)? {
             return Ok(Some(row));
         }
         let record = super::sidecar::read_sidecar(vault_root, &rel_path)
             .unwrap_or_else(|| minimal_record_for(&vault_root.join(&rel_path), &rel_path));
         upsert_conn(conn, &record).map(Some)
-    })
+    })?;
+    if let Some(row) = row.as_mut() {
+        overlay_member_read(vault_root, std::slice::from_mut(row));
+    }
+    Ok(row)
 }
 
 /// Fallback record when a paper folder has no sidecar: folder name as id/title.
@@ -1158,10 +1218,62 @@ pub fn update_meta(
 
 /// Set `is_read` for a paper path; returns the updated row.
 pub fn set_is_read(vault_root: &Path, path: &str, is_read: bool) -> Result<PaperRecord, AppError> {
-    mutate_paper(vault_root, path, |row| {
+    let layout = crate::features::library::layout_for(vault_root);
+    set_is_read_with(vault_root, path, is_read, &layout)
+}
+
+/// Same as [`set_is_read`] with an explicit member layout (tests and callers
+/// that already resolved the roster).
+pub fn set_is_read_with(
+    vault_root: &Path,
+    path: &str,
+    is_read: bool,
+    layout: &crate::features::library::MemberLayout,
+) -> Result<PaperRecord, AppError> {
+    if layout.shared && layout.user_id.is_none() {
+        return Err(AppError::message(
+            "Sign in to mark a paper read in a shared library",
+        ));
+    }
+    let path = crate::fs::normalize_rel_separators(path);
+    if layout.shared {
+        if let Some(user_id) = layout.user_id.as_deref() {
+            super::readers::set_read_flag(vault_root, &path, user_id, is_read)?;
+            super::readers::migrate_paper(vault_root, &path, user_id)?;
+        }
+    }
+    let persisted = mutate_catalog(vault_root, &path, |row| {
         row.is_read = is_read;
         Ok(())
-    })
+    })?;
+    super::sidecar::project_sidecar(vault_root, &persisted, layout);
+    Ok(persisted)
+}
+
+pub fn reading_page(vault_root: &Path, path: &str) -> u32 {
+    let layout = crate::features::library::layout_for(vault_root);
+    if !layout.shared {
+        return 0;
+    }
+    let Some(user_id) = layout.user_id.as_deref() else {
+        return 0;
+    };
+    super::readers::reading_page(vault_root, path, user_id)
+}
+
+pub fn set_reading_page(vault_root: &Path, path: &str, page: u32) -> Result<(), AppError> {
+    let layout = crate::features::library::layout_for(vault_root);
+    if !layout.shared {
+        return Ok(());
+    }
+    let Some(user_id) = layout.user_id.as_deref() else {
+        return Err(AppError::message(
+            "Sign in to save a reading position in a shared library",
+        ));
+    };
+    let path = crate::fs::normalize_rel_separators(path);
+    super::readers::migrate_paper(vault_root, &path, user_id)?;
+    super::readers::set_reading_page(vault_root, &path, user_id, page)
 }
 
 /// Replace tags for a paper path; returns the updated row.
@@ -1229,8 +1341,22 @@ fn mutate_paper(
     path: &str,
     patch: impl FnOnce(&mut PaperRecord) -> Result<(), AppError>,
 ) -> Result<PaperRecord, AppError> {
+    let mut persisted = mutate_catalog(vault_root, path, patch)?;
+    // Projection stays best-effort and outside the transaction, as for upsert.
+    super::sidecar::write_sidecar(vault_root, &persisted);
+    // SQLite keeps one is_read per computer. The list must follow the signed-in
+    // member's reader file after a tag or metadata save.
+    overlay_member_read(vault_root, std::slice::from_mut(&mut persisted));
+    Ok(persisted)
+}
+
+fn mutate_catalog(
+    vault_root: &Path,
+    path: &str,
+    patch: impl FnOnce(&mut PaperRecord) -> Result<(), AppError>,
+) -> Result<PaperRecord, AppError> {
     let path = crate::fs::normalize_rel_separators(path);
-    let persisted = with_catalog(vault_root, |conn| {
+    with_catalog(vault_root, |conn| {
         let tx =
             rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
         let mut row =
@@ -1242,10 +1368,7 @@ fn mutate_paper(
             get_conn(&tx, &path)?.ok_or_else(|| AppError::message("paper not found in catalog"))?;
         tx.commit()?;
         Ok(persisted)
-    })?;
-    // Projection stays best-effort and outside the transaction, as for upsert.
-    super::sidecar::write_sidecar(vault_root, &persisted);
-    Ok(persisted)
+    })
 }
 
 /// Catalog-wide tag inventory entry (name + optional color + count).

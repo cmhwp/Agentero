@@ -601,6 +601,8 @@ function PdfViewerInner({
 	const { pageField, setPageField, pageFocusedRef, goToPage, commitPageField } =
 		usePdfNavigation({
 			paperKey,
+			vaultPath,
+			paperRelPath,
 			currentPage,
 			totalPages,
 			scroll,

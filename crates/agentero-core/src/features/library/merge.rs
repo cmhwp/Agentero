@@ -86,7 +86,7 @@ pub fn merge_libraries(
                 path: Some(normalize_library_path(&entry.path)),
                 on_server: false,
                 cloud_bytes: 0,
-                billing_source: None,
+                billing_source: entry.billing_source.clone(),
                 billing_org_id: None,
                 owned: false,
                 from_saved_map: true,
@@ -223,6 +223,7 @@ mod tests {
         LocalLibraryEntry {
             path: path.to_string(),
             name: name.to_string(),
+            billing_source: None,
         }
     }
 
@@ -283,6 +284,18 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].id.as_deref(), Some("vault-b"));
         assert_eq!(rows[0].path.as_deref(), Some("/Users/me/thesis"));
+    }
+
+    #[test]
+    fn remembered_org_shared_survives_when_the_roster_is_offline() {
+        let mut map = BTreeMap::new();
+        let mut saved = entry("/Users/me/thesis", "Thesis");
+        saved.billing_source = Some("org_shared".into());
+        map.insert("vault-b".into(), saved);
+        let rows = merge_libraries(&map, &[], None);
+        assert_eq!(rows[0].billing_source.as_deref(), Some("org_shared"));
+        assert!(rows[0].connected);
+        assert!(!rows[0].on_server);
     }
 
     #[test]

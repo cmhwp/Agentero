@@ -57,6 +57,8 @@ impl SyncService {
 
     /// Start schedulers for every configured vault (app startup).
     pub fn start_all(&self, app: &AppHandle) {
+        let _ = crate::features::library::session::hydrate_account_id();
+        let _ = agentero_core::features::catalog::readers::migrate_known_shared_libraries();
         for key in config::list_all().keys() {
             self.restart_scheduler(app, key);
         }
@@ -89,11 +91,32 @@ impl SyncService {
                 return;
             };
             let origin = crate::features::library::session::api_origin();
+            match crate::features::library::session::ensure_account_id().await {
+                Ok(Some(_)) => {}
+                Ok(None) => {
+                    service.stop_managed_libraries();
+                    return;
+                }
+                Err(error) => {
+                    log::warn!(
+                        target: "agentero::library",
+                        "shared library migration skipped until the account id is known: {error}"
+                    );
+                    return;
+                }
+            }
             let Ok(remote) =
                 agentero_core::features::library::fetch_libraries(&origin, &token).await
             else {
                 return;
             };
+            let updates: Vec<(String, Option<String>)> = remote
+                .libraries
+                .iter()
+                .map(|library| (library.id.clone(), library.billing_source.clone()))
+                .collect();
+            let _ = agentero_core::features::library::remember_billing_sources(&updates);
+            let _ = agentero_core::features::catalog::readers::migrate_known_shared_libraries();
             let allowed: std::collections::HashSet<String> = remote
                 .libraries
                 .into_iter()

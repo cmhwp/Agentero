@@ -343,6 +343,10 @@ export const commands = {
 	paperRepath: (args: PaperRepathArgs) => __TAURI_INVOKE<ApiResult<PaperRepathResult>>("paper_repath", { args }),
 	/**  Update catalog `is_read` after paper-reader workflow completes (or reset). */
 	paperSetIsRead: (args: PaperSetIsReadArgs) => __TAURI_INVOKE<ApiResult<PaperRecord_Serialize>>("paper_set_is_read", { args }),
+	/**  Last shared reading page for the signed-in member. Personal libraries return 0. */
+	paperReadingPageGet: (args: PaperReadingPageArgs) => __TAURI_INVOKE<ApiResult<PaperReadingPage>>("paper_reading_page_get", { args }),
+	/**  Save the shared reading page. Personal libraries keep the renderer's local position. */
+	paperReadingPageSet: (args: PaperSetReadingPageArgs) => __TAURI_INVOKE<ApiResult<PaperReadingPage>>("paper_reading_page_set", { args }),
 	/**
 	 *  Manually edit paper metadata (patch semantics: only provided fields change,
 	 *  empty strings clear). Marks the row `meta_source = "manual"`.
@@ -557,6 +561,8 @@ export const commands = {
 	libraryRegister: (args: LibraryRegisterArgs) => typedError<ApiResult<LibraryAccountSnapshot>, string>(__TAURI_INVOKE("library_register", { args })),
 	libraryConnect: (args: LibraryConnectArgs) => typedError<ApiResult<LibraryAccountSnapshot>, string>(__TAURI_INVOKE("library_connect", { args })),
 	librarySetBilling: (args: LibraryBillingArgs) => typedError<ApiResult<LibraryAccountSnapshot>, string>(__TAURI_INVOKE("library_set_billing", { args })),
+	/**  Whether `path` belongs to an `org_shared` library, and the signed-in account id. */
+	libraryMemberLayout: (args: LibraryPathArgs) => typedError<ApiResult<LibraryMemberLayout>, string>(__TAURI_INVOKE("library_member_layout", { args })),
 	/**
 	 *  Start (or restart) watching `vault_path` for this window. Emits
 	 *  `vault:file-changed` to this window when files change on disk.
@@ -3494,6 +3500,11 @@ export type LibraryListItem = {
 	owned: boolean,
 };
 
+export type LibraryMemberLayout = {
+	shared: boolean,
+	userId: string | null,
+};
+
 export type LibraryOrgQuota = {
 	id: string,
 	name: string,
@@ -3502,6 +3513,11 @@ export type LibraryOrgQuota = {
 	sharedPoolLimitBytes: number,
 	seatUsedBytes: number,
 	seatAllocatedBytes: number,
+};
+
+export type LibraryPathArgs = {
+	/**  Vault folder, or any file or folder inside it. */
+	path: string,
 };
 
 export type LibraryRecentArgs = {
@@ -3995,6 +4011,16 @@ export type PaperReadingActivityBatchArgs = {
 	paths: string[],
 };
 
+export type PaperReadingPage = {
+	/**  1-based page, or 0 when this library does not store a shared position. */
+	page: number,
+};
+
+export type PaperReadingPageArgs = {
+	vaultPath: string,
+	path: string,
+};
+
 /**
  *  The single paper model: catalog row, `metadata.json` sidecar, IPC payload.
  *  JSON stays snake_case to match the frontend's `PaperMetadata`.
@@ -4208,6 +4234,12 @@ export type PaperSetPageCountsArgs = {
 	vaultPath: string,
 	/**  vault-relative paper path → page count. */
 	counts: { [key in string]: number },
+};
+
+export type PaperSetReadingPageArgs = {
+	vaultPath: string,
+	path: string,
+	page: number,
 };
 
 export type PaperSetTagsArgs = {

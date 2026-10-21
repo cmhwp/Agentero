@@ -169,9 +169,72 @@ pub struct PaperSetIsReadArgs {
 #[tauri::command]
 #[specta::specta]
 pub async fn paper_set_is_read(args: PaperSetIsReadArgs) -> ApiResult<PaperRecord> {
+    if let Err(error) = crate::features::library::session::ensure_account_id().await {
+        log::warn!(target: "agentero::library", "account id: {error}");
+    }
     run_blocking(move || {
+        let _ = crate::features::library::session::hydrate_account_id();
         let vault = try_vault!(&args.vault_path);
         service::set_is_read(&vault, &args.path, args.is_read)
+    })
+    .await
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperReadingPageArgs {
+    pub vault_path: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperReadingPage {
+    /// 1-based page, or 0 when this library does not store a shared position.
+    pub page: u32,
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperSetReadingPageArgs {
+    pub vault_path: String,
+    pub path: String,
+    pub page: u32,
+}
+
+/// Last shared reading page for the signed-in member. Personal libraries return 0.
+#[tauri::command]
+#[specta::specta]
+pub async fn paper_reading_page_get(args: PaperReadingPageArgs) -> ApiResult<PaperReadingPage> {
+    if let Err(error) = crate::features::library::session::ensure_account_id().await {
+        log::warn!(target: "agentero::library", "account id: {error}");
+    }
+    run_blocking(move || {
+        let _ = crate::features::library::session::hydrate_account_id();
+        let vault = try_vault!(&args.vault_path);
+        ApiResult::ok(PaperReadingPage {
+            page: papers::reading_page(&vault, &args.path),
+        })
+    })
+    .await
+}
+
+/// Save the shared reading page. Personal libraries keep the renderer's local position.
+#[tauri::command]
+#[specta::specta]
+pub async fn paper_reading_page_set(args: PaperSetReadingPageArgs) -> ApiResult<PaperReadingPage> {
+    if let Err(error) = crate::features::library::session::ensure_account_id().await {
+        log::warn!(target: "agentero::library", "account id: {error}");
+    }
+    run_blocking(move || {
+        let _ = crate::features::library::session::hydrate_account_id();
+        let vault = try_vault!(&args.vault_path);
+        if let Err(error) = papers::set_reading_page(&vault, &args.path, args.page) {
+            return map_err(error);
+        }
+        ApiResult::ok(PaperReadingPage {
+            page: papers::reading_page(&vault, &args.path),
+        })
     })
     .await
 }

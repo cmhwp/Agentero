@@ -71,20 +71,12 @@ pub fn append(paper_dir: &Path, items: Vec<Value>) -> Result<usize, AppError> {
     Ok(added)
 }
 
-/// Patch one annotation in place. Returns false when the id is unknown.
-pub fn update(
-    paper_dir: &Path,
-    id: &str,
+/// Patch one annotation transfer item in memory.
+pub fn patch_highlight_item(
+    item: &mut Value,
     contents: Option<&str>,
     color: Option<&str>,
 ) -> Result<bool, AppError> {
-    let mut items = load(paper_dir);
-    let Some(item) = items
-        .iter_mut()
-        .find(|i| annotation_id(i).as_deref() == Some(id))
-    else {
-        return Ok(false);
-    };
     let Some(anno) = item.get_mut("annotation").and_then(Value::as_object_mut) else {
         return Ok(false);
     };
@@ -109,6 +101,26 @@ pub fn update(
         }
     }
     anno.insert("modified".into(), json!(now_iso()));
+    Ok(true)
+}
+
+/// Patch one annotation in the personal aggregate. Returns false when the id is unknown.
+pub fn update(
+    paper_dir: &Path,
+    id: &str,
+    contents: Option<&str>,
+    color: Option<&str>,
+) -> Result<bool, AppError> {
+    let mut items = load(paper_dir);
+    let Some(item) = items
+        .iter_mut()
+        .find(|i| annotation_id(i).as_deref() == Some(id))
+    else {
+        return Ok(false);
+    };
+    if !patch_highlight_item(item, contents, color)? {
+        return Ok(false);
+    }
     write_all(paper_dir, &items)?;
     Ok(true)
 }

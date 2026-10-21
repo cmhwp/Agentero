@@ -211,45 +211,34 @@ fn list(globals: &GlobalOpts, ref_: &str, kind: Option<&str>) -> Result<Value, C
     let vault = resolve_vault(globals)?;
     let paper = resolve_paper(&vault, ref_, globals)?;
     let dir = paper_dir(&vault, &paper.path);
-    let marks_dir = dir.join("marks");
+    let shared = agentero_core::features::library::layout_for(&vault).shared;
     let mut items: Vec<MarkListItem> = Vec::new();
 
-    if marks_dir.is_dir() {
-        let rd = fs::read_dir(&marks_dir)
-            .map_err(|e| CliError::message(format!("failed to read marks/: {e}")))?;
-        for entry in rd.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if !name.ends_with(".json") || name == "annotations.json" {
-                continue;
-            }
-            let id = name.trim_end_matches(".json").to_string();
-            let path = entry.path();
+    for file in agentero_core::features::pdf::marks::files::list_mark_files(&dir) {
+            let id = file.id.clone();
+            let path = file.path.clone();
+            let rel = file
+                .owner
+                .as_ref()
+                .map(|owner| format!("{}/marks/{owner}/{id}.json", paper.path))
+                .unwrap_or_else(|| format!("{}/marks/{id}.json", paper.path));
             let Ok(text) = fs::read_to_string(&path) else {
                 continue;
             };
             let Ok(raw) = serde_json::from_str::<Value>(&text) else {
                 continue;
             };
-            let k = raw
+            let mut k = raw
                 .get("kind")
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            if let Some(filter) = kind {
-                if !k.eq_ignore_ascii_case(filter) {
-                    continue;
-                }
-            }
-            let page = raw.get("page").and_then(|v| v.as_u64()).or_else(|| {
+            let mut page = raw.get("page").and_then(|v| v.as_u64()).or_else(|| {
                 raw.get("anchor")
                     .and_then(|a| a.get("page"))
                     .and_then(|v| v.as_u64())
             });
-            let geometry = raw
-                .get("geometry")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            let quote = raw
+            let mut quote = raw
                 .get("quote")
                 .and_then(|v| v.as_str())
                 .or_else(|| {
@@ -258,19 +247,43 @@ fn list(globals: &GlobalOpts, ref_: &str, kind: Option<&str>) -> Result<Value, C
                         .and_then(|v| v.as_str())
                 })
                 .map(|s| s.to_string());
+            if k.is_empty() {
+                if let Some(anno) = raw.get("annotation") {
+                    k = "highlight".into();
+                    page = anno
+                        .get("pageIndex")
+                        .and_then(|v| v.as_u64())
+                        .map(|p| p + 1);
+                    quote = anno
+                        .get("custom")
+                        .and_then(|c| c.get("quote"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                }
+            }
+            if let Some(filter) = kind {
+                if !k.eq_ignore_ascii_case(filter) {
+                    continue;
+                }
+            }
+            let geometry = raw
+                .get("geometry")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .or_else(|| k.eq_ignore_ascii_case("highlight").then(|| "resolved".into()));
             items.push(MarkListItem {
                 id,
                 kind: k,
                 page,
                 geometry,
                 quote,
-                path: format!("{}/marks/{name}", paper.path),
+                path: rel,
             });
-        }
     }
 
-    // Highlights/批注 live in the aggregate annotations blob, not per-id files.
-    if kind.is_none_or(|k| k.eq_ignore_ascii_case("highlight")) {
+    // Personal libraries keep highlights in the aggregate. Shared libraries
+    // rebuild that list from each member's mark files.
+    if !shared && kind.is_none_or(|k| k.eq_ignore_ascii_case("highlight")) {
         for item in annotations::load(&dir) {
             let anno = item.get("annotation").unwrap_or(&Value::Null);
             let Some(id) = anno.get("id").and_then(|v| v.as_str()) else {
@@ -319,10 +332,40 @@ fn list(globals: &GlobalOpts, ref_: &str, kind: Option<&str>) -> Result<Value, C
     }))
 }
 
+fn member_mark<'a>(
+    files: &'a [agentero_core::features::pdf::marks::files::MarkFile],
+    id: &str,
+    user_id: Option<&str>,
+) -> Option<&'a agentero_core::features::pdf::marks::files::MarkFile> {
+    files
+        .iter()
+        .find(|file| file.id == id && user_id.is_some() && file.owner.as_deref() == user_id)
+        .or_else(|| files.iter().find(|file| file.id == id))
+}
+
 fn get(globals: &GlobalOpts, ref_: &str, id: &str) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
     let paper = resolve_paper(&vault, ref_, globals)?;
     let dir = paper_dir(&vault, &paper.path);
+    let layout = agentero_core::features::library::layout_for(&vault);
+    let files = agentero_core::features::pdf::marks::files::list_mark_files(&dir);
+    if let Some(file) = member_mark(&files, id, layout.user_id.as_deref()) {
+        let text = fs::read_to_string(&file.path)
+            .map_err(|e| CliError::message(format!("failed to read mark: {e}")))?;
+        let raw: Value = serde_json::from_str(&text)
+            .map_err(|e| CliError::message(format!("invalid mark JSON: {e}")))?;
+        let rel = file
+            .owner
+            .as_ref()
+            .map(|owner| format!("{}/marks/{owner}/{id}.json", paper.path))
+            .unwrap_or_else(|| format!("{}/marks/{id}.json", paper.path));
+        return Ok(json!({
+            "paperPath": paper.path,
+            "path": rel,
+            "mark": raw,
+            "lines": [text.trim_end()],
+        }));
+    }
     let path = mark_file(&vault, &paper.path, id);
     if path.is_file() {
         let text = fs::read_to_string(&path)
@@ -336,6 +379,7 @@ fn get(globals: &GlobalOpts, ref_: &str, id: &str) -> Result<Value, CliError> {
             "lines": [text.trim_end()],
         }));
     }
+    if !layout.shared {
     if let Some(item) = annotations::load(&dir).into_iter().find(|i| {
         i.get("annotation")
             .and_then(|a| a.get("id"))
@@ -349,6 +393,7 @@ fn get(globals: &GlobalOpts, ref_: &str, id: &str) -> Result<Value, CliError> {
             "mark": item,
             "lines": [pretty],
         }));
+    }
     }
     Err(CliError::with_details(
         "mark_not_found",
@@ -436,13 +481,13 @@ async fn add(globals: &GlobalOpts, opts: AddOpts<'_>) -> Result<Value, CliError>
                     opts.comment,
                     layout_ref.clone(),
                 );
-                write_mark_file(&dir, &id, &mark)?;
+                write_mark_file(&vault, &dir, &id, &mark)?;
                 written.push(mark);
             }
             "translate" => {
                 let result = translation.as_deref().unwrap_or_default();
                 let mark = build_translate_mark(&id, &paper.path, &now, hit, quote, result);
-                write_mark_file(&dir, &id, &mark)?;
+                write_mark_file(&vault, &dir, &id, &mark)?;
                 written.push(mark);
             }
             other => {
@@ -452,12 +497,38 @@ async fn add(globals: &GlobalOpts, opts: AddOpts<'_>) -> Result<Value, CliError>
         ids.push(id);
     }
 
+    let layout = agentero_core::features::library::layout_for(&vault);
     if !transfer_items.is_empty() {
-        annotations::append(&dir, transfer_items).map_err(|e| CliError::message(e.to_string()))?;
+        if layout.shared {
+            let user = layout.user_id.as_deref().ok_or_else(|| {
+                CliError::message("Sign in to add marks in a shared library")
+            })?;
+            agentero_core::features::pdf::marks::files::append_owned_highlights(
+                &dir,
+                user,
+                &transfer_items,
+            )
+            .map_err(|e| CliError::message(e.to_string()))?;
+        } else {
+            annotations::append(&dir, transfer_items)
+                .map_err(|e| CliError::message(e.to_string()))?;
+        }
     }
 
-    let target = if kind == "highlight" {
+    let target = if kind == "highlight" && layout.shared {
+        format!(
+            "{}/marks/{}/<id>.json",
+            paper.path,
+            layout.user_id.as_deref().unwrap_or("user")
+        )
+    } else if kind == "highlight" {
         format!("{}/marks/annotations.json", paper.path)
+    } else if layout.shared {
+        format!(
+            "{}/marks/{}/<id>.json",
+            paper.path,
+            layout.user_id.as_deref().unwrap_or("user")
+        )
     } else {
         format!("{}/marks/<id>.json", paper.path)
     };
@@ -493,6 +564,52 @@ fn update(
     let vault = resolve_vault(globals)?;
     let paper = resolve_paper(&vault, ref_, globals)?;
     let dir = paper_dir(&vault, &paper.path);
+    let layout = agentero_core::features::library::layout_for(&vault);
+    if layout.shared {
+        let user = layout.user_id.as_deref().ok_or_else(|| {
+            CliError::message("Sign in to add marks in a shared library")
+        })?;
+        let files = agentero_core::features::pdf::marks::files::list_mark_files(&dir);
+        let Some(file) = files
+            .iter()
+            .find(|file| file.id == id && file.owner.as_deref() == Some(user))
+        else {
+            if files.iter().any(|file| file.id == id) {
+                return Err(CliError::message("Cannot change another member's mark"));
+            }
+            return Err(CliError::with_details(
+                "mark_not_found",
+                format!("mark not found: {id}"),
+                json!({ "paperPath": paper.path, "id": id }),
+                ExitCode::Business,
+            ));
+        };
+        let text = fs::read_to_string(&file.path)
+            .map_err(|e| CliError::message(format!("failed to read mark: {e}")))?;
+        let mut raw: Value = serde_json::from_str(&text)
+            .map_err(|e| CliError::message(format!("invalid mark JSON: {e}")))?;
+        if raw.get("annotation").is_some() {
+            annotations::patch_highlight_item(&mut raw, comment, color)
+                .map_err(|e| CliError::message(e.to_string()))?;
+        } else if let Some(c) = comment {
+            let trimmed = c.trim();
+            if trimmed.is_empty() {
+                raw.as_object_mut().map(|obj| obj.remove("comment"));
+            } else {
+                raw["comment"] = json!(trimmed);
+            }
+            raw["updatedAt"] = json!(annotations::now_iso());
+        }
+        agentero_core::features::pdf::marks::files::write_owned_mark(&dir, user, id, &raw)
+            .map_err(|e| CliError::message(e.to_string()))?;
+        return Ok(json!({
+            "paperPath": paper.path,
+            "id": id,
+            "path": format!("{}/marks/{user}/{id}.json", paper.path),
+            "mark": raw,
+            "lines": [format!("updated {id}")],
+        }));
+    }
 
     if annotations::update(&dir, id, comment, color)
         .map_err(|e| CliError::message(e.to_string()))?
@@ -533,7 +650,7 @@ fn update(
     }
     raw["updatedAt"] = json!(annotations::now_iso());
     let id_owned = id.trim().to_string();
-    write_mark_file(&dir, &id_owned, &raw)?;
+    write_mark_file(&vault, &dir, &id_owned, &raw)?;
     Ok(json!({
         "paperPath": paper.path,
         "id": id,
@@ -547,6 +664,45 @@ fn delete(globals: &GlobalOpts, ref_: &str, id: &str) -> Result<Value, CliError>
     let vault = resolve_vault(globals)?;
     let paper = resolve_paper(&vault, ref_, globals)?;
     let dir = paper_dir(&vault, &paper.path);
+    let layout = agentero_core::features::library::layout_for(&vault);
+    if layout.shared {
+        let user = layout.user_id.as_deref().ok_or_else(|| {
+            CliError::message("Sign in to add marks in a shared library")
+        })?;
+        let files = agentero_core::features::pdf::marks::files::list_mark_files(&dir);
+        let Some(file) = files
+            .iter()
+            .find(|file| file.id == id && file.owner.as_deref() == Some(user))
+        else {
+            if files.iter().any(|file| file.id == id) {
+                return Err(CliError::message("Cannot change another member's mark"));
+            }
+            return Err(CliError::with_details(
+                "mark_not_found",
+                format!("mark not found: {id}"),
+                json!({ "paperPath": paper.path, "id": id }),
+                ExitCode::Business,
+            ));
+        };
+        if !globals.yes {
+            let ok = prompt::confirm(
+                globals,
+                &format!("Delete mark {id} under {}?", paper.path),
+                false,
+            )?;
+            if !ok {
+                return Err(CliError::needs_confirmation("delete cancelled"));
+            }
+        }
+        fs::remove_file(&file.path)
+            .map_err(|e| CliError::message(format!("failed to delete mark: {e}")))?;
+        return Ok(json!({
+            "paperPath": paper.path,
+            "id": id,
+            "deleted": true,
+            "lines": [format!("deleted {}/marks/{user}/{id}.json", paper.path)],
+        }));
+    }
     let path = mark_file(&vault, &paper.path, id);
     let in_annotations = annotations::load(&dir).iter().any(|i| {
         i.get("annotation")
@@ -803,7 +959,16 @@ fn build_translate_mark(
     })
 }
 
-fn write_mark_file(dir: &Path, id: &str, mark: &Value) -> Result<(), CliError> {
+fn write_mark_file(vault: &Path, dir: &Path, id: &str, mark: &Value) -> Result<(), CliError> {
+    let layout = agentero_core::features::library::layout_for(vault);
+    if layout.shared {
+        let user = layout.user_id.as_deref().ok_or_else(|| {
+            CliError::message("Sign in to add marks in a shared library")
+        })?;
+        agentero_core::features::pdf::marks::files::write_owned_mark(dir, user, id, mark)
+            .map_err(|e| CliError::message(e.to_string()))?;
+        return Ok(());
+    }
     let marks_dir = dir.join("marks");
     fs::create_dir_all(&marks_dir)
         .map_err(|e| CliError::message(format!("failed to create marks/: {e}")))?;
