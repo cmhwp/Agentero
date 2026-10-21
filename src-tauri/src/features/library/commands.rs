@@ -716,3 +716,246 @@ pub async fn library_member_layout(
         .await,
     )
 }
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryShareSummary {
+    pub id: String,
+    pub library_id: String,
+    pub name: String,
+    pub permission: String,
+    pub paper_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryShareFileInfo {
+    pub key: String,
+    pub size: u64,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryShareOpenResult {
+    pub share: LibraryShareSummary,
+    pub files: Vec<LibraryShareFileInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryShareImportResult {
+    pub paper_paths: Vec<String>,
+    pub files: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryShareCommentResult {
+    pub id: String,
+    pub share_id: String,
+    pub author_id: String,
+    pub body: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryShareCreateArgs {
+    pub library_id: String,
+    pub name: String,
+    pub permission: String,
+    pub paper_paths: Vec<String>,
+    pub emails: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryShareIdArgs {
+    pub library_id: String,
+    pub share_id: String,
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryShareLibraryArgs {
+    pub library_id: String,
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryShareOpenArgs {
+    pub share_id: String,
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryShareImportArgs {
+    pub share_id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryShareCommentArgs {
+    pub share_id: String,
+    pub body: String,
+}
+
+fn share_summary(share: library::ShareSummary) -> LibraryShareSummary {
+    LibraryShareSummary {
+        id: share.id,
+        library_id: share.library_id,
+        name: share.name,
+        permission: share.permission,
+        paper_paths: share.paper_paths,
+    }
+}
+
+async fn session_token() -> Result<String, AppError> {
+    session::load_token()?.ok_or_else(|| AppError::message("Sign in before sharing a library"))
+}
+
+/// Share selected paper folders from a managed library. The session token
+/// stays in the keychain; the request does not store a library token.
+#[tauri::command]
+#[specta::specta]
+pub async fn library_share_create(
+    args: LibraryShareCreateArgs,
+) -> Result<ApiResult<LibraryShareSummary>, String> {
+    command_result(
+        async {
+            let id = validate_id(&args.library_id)?;
+            let token = session_token().await?;
+            let created = library::create_share(
+                &session::api_origin(),
+                &token,
+                &id,
+                &args.name,
+                &args.permission,
+                &args.paper_paths,
+                &args.emails,
+            )
+            .await?;
+            Ok(share_summary(created))
+        }
+        .await,
+    )
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_share_revoke(args: LibraryShareIdArgs) -> Result<ApiResult<()>, String> {
+    command_result(
+        async {
+            let id = validate_id(&args.library_id)?;
+            let token = session_token().await?;
+            library::revoke_share(&session::api_origin(), &token, &id, &args.share_id).await
+        }
+        .await,
+    )
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_shares_received() -> Result<ApiResult<Vec<LibraryShareSummary>>, String> {
+    command_result(
+        async {
+            let token = session_token().await?;
+            let shares = library::list_received_shares(&session::api_origin(), &token).await?;
+            Ok(shares.into_iter().map(share_summary).collect())
+        }
+        .await,
+    )
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_shares_owned(
+    args: LibraryShareLibraryArgs,
+) -> Result<ApiResult<Vec<LibraryShareSummary>>, String> {
+    command_result(
+        async {
+            let id = validate_id(&args.library_id)?;
+            let token = session_token().await?;
+            let shares = library::list_owned_shares(&session::api_origin(), &token, &id).await?;
+            Ok(shares.into_iter().map(share_summary).collect())
+        }
+        .await,
+    )
+}
+
+/// List the granted files from the source. A later call sees a newer source PDF.
+#[tauri::command]
+#[specta::specta]
+pub async fn library_share_open(
+    args: LibraryShareOpenArgs,
+) -> Result<ApiResult<LibraryShareOpenResult>, String> {
+    command_result(
+        async {
+            let token = session_token().await?;
+            let opened =
+                library::open_share(&session::api_origin(), &token, &args.share_id).await?;
+            Ok(LibraryShareOpenResult {
+                share: share_summary(opened.share),
+                files: opened
+                    .files
+                    .into_iter()
+                    .map(|file| LibraryShareFileInfo {
+                        key: file.key,
+                        size: file.size,
+                    })
+                    .collect(),
+            })
+        }
+        .await,
+    )
+}
+
+/// Copy the granted papers into a local library. The copy does not follow the source.
+#[tauri::command]
+#[specta::specta]
+pub async fn library_share_import(
+    args: LibraryShareImportArgs,
+) -> Result<ApiResult<LibraryShareImportResult>, String> {
+    command_result(
+        async {
+            let dest = resolve_vault(&args.path)?;
+            let token = session_token().await?;
+            let imported =
+                library::import_share_into(&session::api_origin(), &token, &args.share_id, &dest)
+                    .await?;
+            Ok(LibraryShareImportResult {
+                paper_paths: imported.paper_paths,
+                files: imported.files,
+            })
+        }
+        .await,
+    )
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn library_share_comment(
+    args: LibraryShareCommentArgs,
+) -> Result<ApiResult<LibraryShareCommentResult>, String> {
+    command_result(
+        async {
+            let token = session_token().await?;
+            let comment = library::comment_on_share(
+                &session::api_origin(),
+                &token,
+                &args.share_id,
+                &args.body,
+            )
+            .await?;
+            Ok(LibraryShareCommentResult {
+                id: comment.id,
+                share_id: comment.share_id,
+                author_id: comment.author_id,
+                body: comment.body,
+                created_at: comment.created_at,
+            })
+        }
+        .await,
+    )
+}

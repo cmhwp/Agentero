@@ -564,6 +564,19 @@ export const commands = {
 	/**  Whether `path` belongs to an `org_shared` library, and the signed-in account id. */
 	libraryMemberLayout: (args: LibraryPathArgs) => typedError<ApiResult<LibraryMemberLayout>, string>(__TAURI_INVOKE("library_member_layout", { args })),
 	/**
+	 *  Share selected paper folders from a managed library. The session token
+	 *  stays in the keychain; the request does not store a library token.
+	 */
+	libraryShareCreate: (args: LibraryShareCreateArgs) => typedError<ApiResult<LibraryShareSummary>, string>(__TAURI_INVOKE("library_share_create", { args })),
+	libraryShareRevoke: (args: LibraryShareIdArgs) => typedError<ApiResult<null>, string>(__TAURI_INVOKE("library_share_revoke", { args })),
+	librarySharesOwned: (args: LibraryShareLibraryArgs) => typedError<ApiResult<LibraryShareSummary[]>, string>(__TAURI_INVOKE("library_shares_owned", { args })),
+	librarySharesReceived: () => typedError<ApiResult<LibraryShareSummary[]>, string>(__TAURI_INVOKE("library_shares_received")),
+	/**  List the granted files from the source. A later call sees a newer source PDF. */
+	libraryShareOpen: (args: LibraryShareOpenArgs) => typedError<ApiResult<LibraryShareOpenResult>, string>(__TAURI_INVOKE("library_share_open", { args })),
+	/**  Copy the granted papers into a local library. The copy does not follow the source. */
+	libraryShareImport: (args: LibraryShareImportArgs) => typedError<ApiResult<LibraryShareImportResult>, string>(__TAURI_INVOKE("library_share_import", { args })),
+	libraryShareComment: (args: LibraryShareCommentArgs) => typedError<ApiResult<LibraryShareCommentResult>, string>(__TAURI_INVOKE("library_share_comment", { args })),
+	/**
 	 *  Start (or restart) watching `vault_path` for this window. Emits
 	 *  `vault:file-changed` to this window when files change on disk.
 	 */
@@ -3533,6 +3546,68 @@ export type LibraryRegisterArgs = {
 export type LibrarySessionSetArgs = {
 	token: string,
 	recentPaths: string[],
+};
+
+export type LibraryShareCommentArgs = {
+	shareId: string,
+	body: string,
+};
+
+export type LibraryShareCommentResult = {
+	id: string,
+	shareId: string,
+	authorId: string,
+	body: string,
+	createdAt: string,
+};
+
+export type LibraryShareCreateArgs = {
+	libraryId: string,
+	name: string,
+	permission: string,
+	paperPaths: string[],
+	emails: string[],
+};
+
+export type LibraryShareFileInfo = {
+	key: string,
+	size: number,
+};
+
+export type LibraryShareIdArgs = {
+	libraryId: string,
+	shareId: string,
+};
+
+export type LibraryShareImportArgs = {
+	shareId: string,
+	path: string,
+};
+
+export type LibraryShareImportResult = {
+	paperPaths: string[],
+	files: string[],
+};
+
+export type LibraryShareLibraryArgs = {
+	libraryId: string,
+};
+
+export type LibraryShareOpenArgs = {
+	shareId: string,
+};
+
+export type LibraryShareOpenResult = {
+	share: LibraryShareSummary,
+	files: LibraryShareFileInfo[],
+};
+
+export type LibraryShareSummary = {
+	id: string,
+	libraryId: string,
+	name: string,
+	permission: string,
+	paperPaths: string[],
 };
 
 export type LibraryUser = {

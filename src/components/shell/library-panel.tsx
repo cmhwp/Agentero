@@ -1,6 +1,7 @@
 import { Cloud, FolderOpen, LogIn, LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LibrarySharePanel } from "@/components/shell/library-share-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { commands } from "@/lib/core/bindings";
@@ -369,6 +370,13 @@ export function LibraryPanel({
 						</Button>
 					</form>
 				</div>
+			)}
+
+			{signedIn && (
+				<LibrarySharePanel
+					disabled={disabled}
+					libraries={account?.libraries ?? []}
+				/>
 			)}
 
 			{!signedIn && (
