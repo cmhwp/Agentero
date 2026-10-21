@@ -556,6 +556,7 @@ export const commands = {
 	librarySignOut: (args: LibraryRecentArgs) => typedError<ApiResult<LibraryAccountSnapshot>, string>(__TAURI_INVOKE("library_sign_out", { args })),
 	libraryRegister: (args: LibraryRegisterArgs) => typedError<ApiResult<LibraryAccountSnapshot>, string>(__TAURI_INVOKE("library_register", { args })),
 	libraryConnect: (args: LibraryConnectArgs) => typedError<ApiResult<LibraryAccountSnapshot>, string>(__TAURI_INVOKE("library_connect", { args })),
+	librarySetBilling: (args: LibraryBillingArgs) => typedError<ApiResult<LibraryAccountSnapshot>, string>(__TAURI_INVOKE("library_set_billing", { args })),
 	/**
 	 *  Start (or restart) watching `vault_path` for this window. Emits
 	 *  `vault:file-changed` to this window when files change on disk.
@@ -3432,6 +3433,14 @@ export type LibraryAccountSnapshot = {
 	planVersion: number | null,
 	remoteError: string | null,
 	libraries: LibraryListItem[],
+	organizations: LibraryOrgQuota[],
+};
+
+export type LibraryBillingArgs = {
+	id: string,
+	billingSource: string,
+	billingOrgId: string | null,
+	recentPaths: string[],
 };
 
 export type LibraryCitingScanArgs = {
@@ -3480,6 +3489,19 @@ export type LibraryListItem = {
 	limitBytes: number | null,
 	cloudMode: string | null,
 	syncError: string | null,
+	billingSource: string | null,
+	billingOrgId: string | null,
+	owned: boolean,
+};
+
+export type LibraryOrgQuota = {
+	id: string,
+	name: string,
+	role: string,
+	sharedPoolUsedBytes: number,
+	sharedPoolLimitBytes: number,
+	seatUsedBytes: number,
+	seatAllocatedBytes: number,
 };
 
 export type LibraryRecentArgs = {

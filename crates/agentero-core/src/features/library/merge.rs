@@ -18,6 +18,9 @@ pub struct ServerLibrary {
     pub id: String,
     pub display_name: String,
     pub cloud_bytes: u64,
+    pub billing_source: Option<String>,
+    pub billing_org_id: Option<String>,
+    pub owned: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,6 +31,9 @@ pub struct LibraryRow {
     pub connected: bool,
     pub on_server: bool,
     pub cloud_bytes: u64,
+    pub billing_source: Option<String>,
+    pub billing_org_id: Option<String>,
+    pub owned: bool,
 }
 
 struct Draft {
@@ -36,6 +42,9 @@ struct Draft {
     path: Option<String>,
     on_server: bool,
     cloud_bytes: u64,
+    billing_source: Option<String>,
+    billing_org_id: Option<String>,
+    owned: bool,
     from_saved_map: bool,
 }
 
@@ -77,6 +86,9 @@ pub fn merge_libraries(
                 path: Some(normalize_library_path(&entry.path)),
                 on_server: false,
                 cloud_bytes: 0,
+                billing_source: None,
+                billing_org_id: None,
+                owned: false,
                 from_saved_map: true,
             },
         );
@@ -107,6 +119,9 @@ pub fn merge_libraries(
                     path: Some(path),
                     on_server: false,
                     cloud_bytes: 0,
+                    billing_source: None,
+                    billing_org_id: None,
+                    owned: false,
                     from_saved_map: false,
                 },
             );
@@ -130,6 +145,9 @@ pub fn merge_libraries(
             path: Some(path),
             on_server: false,
             cloud_bytes: 0,
+            billing_source: None,
+            billing_org_id: None,
+            owned: false,
             from_saved_map: false,
         });
     }
@@ -149,6 +167,9 @@ pub fn merge_libraries(
                 row.name = name;
                 row.on_server = true;
                 row.cloud_bytes = library.cloud_bytes;
+                row.billing_source = library.billing_source.clone();
+                row.billing_org_id = library.billing_org_id.clone();
+                row.owned = library.owned;
             } else {
                 by_id.insert(
                     id.to_string(),
@@ -158,6 +179,9 @@ pub fn merge_libraries(
                         path: None,
                         on_server: true,
                         cloud_bytes: library.cloud_bytes,
+                        billing_source: library.billing_source.clone(),
+                        billing_org_id: library.billing_org_id.clone(),
+                        owned: library.owned,
                         from_saved_map: false,
                     },
                 );
@@ -176,6 +200,9 @@ pub fn merge_libraries(
             path: row.path,
             on_server: row.on_server,
             cloud_bytes: row.cloud_bytes,
+            billing_source: row.billing_source,
+            billing_org_id: row.billing_org_id,
+            owned: row.owned,
         })
         .collect();
     rows.sort_by(|left, right| {
@@ -205,6 +232,9 @@ mod tests {
             id: "vault-a".into(),
             display_name: "Research".into(),
             cloud_bytes: 0,
+            billing_source: None,
+            billing_org_id: None,
+            owned: true,
         }];
         let rows = merge_libraries(&BTreeMap::new(), &[], Some(&server));
         assert_eq!(rows.len(), 1);
@@ -223,8 +253,14 @@ mod tests {
             id: "vault-a".into(),
             display_name: "Research".into(),
             cloud_bytes: 0,
+            billing_source: Some("org_grant".into()),
+            billing_org_id: Some("org-a".into()),
+            owned: true,
         }];
         let rows = merge_libraries(&map, &[], Some(&server));
+        assert_eq!(rows[0].billing_source.as_deref(), Some("org_grant"));
+        assert_eq!(rows[0].billing_org_id.as_deref(), Some("org-a"));
+        assert!(rows[0].owned);
         assert_eq!(rows[0].path.as_deref(), Some("/Users/me/research"));
         assert!(rows[0].connected);
         assert_eq!(rows[0].name, "Research");
@@ -239,6 +275,9 @@ mod tests {
             id: "vault-b".into(),
             display_name: "Thesis".into(),
             cloud_bytes: 0,
+            billing_source: Some("org_shared".into()),
+            billing_org_id: Some("org-a".into()),
+            owned: false,
         }];
         let rows = merge_libraries(&map, &[], Some(&server));
         assert_eq!(rows.len(), 1);

@@ -7,6 +7,9 @@ mod api;
 mod merge;
 mod store;
 
-pub use api::{fetch_libraries, fetch_session, register_library, sign_out, RemoteUser};
+pub use api::{
+    fetch_libraries, fetch_session, register_library, set_library_billing, sign_out,
+    RemoteOrgQuota, RemoteUser,
+};
 pub use merge::{merge_libraries, LibraryRow, RecentFolder, ServerLibrary};
 pub use store::{load, normalize_library_path, upsert};

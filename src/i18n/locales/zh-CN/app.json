@@ -212,7 +212,11 @@
 			"pasteToggle": "粘贴会话令牌",
 			"pastePlaceholder": "会话令牌",
 			"pasteSubmit": "使用令牌",
-			"empty": "还没有库。"
+			"empty": "还没有库。",
+			"billingPersonal": "个人云空间",
+			"billingOrg": "{{name}} 席位",
+			"billingShared": "共享池",
+			"billingLabel": "云端计费"
 		}
 	},
 	"confirm": {

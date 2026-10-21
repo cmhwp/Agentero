@@ -26,6 +26,19 @@ type LibraryListItem = {
 	limitBytes: number | null;
 	cloudMode: string | null;
 	syncError: string | null;
+	billingSource: string | null;
+	billingOrgId: string | null;
+	owned: boolean;
+};
+
+type LibraryOrgQuota = {
+	id: string;
+	name: string;
+	role: string;
+	sharedPoolUsedBytes: number;
+	sharedPoolLimitBytes: number;
+	seatUsedBytes: number;
+	seatAllocatedBytes: number;
 };
 
 type LibraryAccountSnapshot = {
@@ -36,6 +49,7 @@ type LibraryAccountSnapshot = {
 	planVersion: number | null;
 	remoteError: string | null;
 	libraries: LibraryListItem[];
+	organizations: LibraryOrgQuota[];
 };
 
 export function LibraryPanel({
@@ -192,6 +206,64 @@ export function LibraryPanel({
 													? displayPath(library.path)
 													: t("vault.libraries.unconnected")}
 											</p>
+											{library.onServer && library.owned && library.id ? (
+												<label className="mt-1 flex items-center gap-2 text-muted-foreground text-xs">
+													<span className="shrink-0">
+														{t("vault.libraries.billingLabel")}
+													</span>
+													<select
+														className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1 text-foreground"
+														disabled={disabled}
+														aria-label={t("vault.libraries.billingLabel")}
+														value={
+															library.billingSource === "org_grant" &&
+															library.billingOrgId
+																? library.billingOrgId
+																: library.billingSource === "org_shared"
+																	? "shared"
+																	: "personal"
+														}
+														onChange={(event) => {
+															const value = event.target.value;
+															if (!library.id || value === "shared") return;
+															void run(() =>
+																callApiResult(() =>
+																	commands.librarySetBilling({
+																		id: library.id as string,
+																		billingSource:
+																			value === "personal"
+																				? "personal"
+																				: "org_grant",
+																		billingOrgId:
+																			value === "personal" ? null : value,
+																		recentPaths: recentVaults,
+																	}),
+																),
+															);
+														}}
+													>
+														<option value="personal">
+															{t("vault.libraries.billingPersonal")}
+														</option>
+														{(account?.organizations ?? []).map((org) => (
+															<option key={org.id} value={org.id}>
+																{t("vault.libraries.billingOrg", {
+																	name: org.name,
+																})}
+															</option>
+														))}
+														{library.billingSource === "org_shared" ? (
+															<option value="shared">
+																{t("vault.libraries.billingShared")}
+															</option>
+														) : null}
+													</select>
+												</label>
+											) : library.billingSource === "org_shared" ? (
+												<p className="truncate text-muted-foreground text-xs">
+													{t("vault.libraries.billingShared")}
+												</p>
+											) : null}
 											{library.syncError ? (
 												<p className="truncate text-destructive text-xs">
 													{library.syncError}

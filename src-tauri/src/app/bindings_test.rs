@@ -209,6 +209,7 @@ fn export_typescript_bindings() {
             crate::features::library::commands::library_sign_out,
             crate::features::library::commands::library_register,
             crate::features::library::commands::library_connect,
+            crate::features::library::commands::library_set_billing,
             crate::features::vault::watcher::commands::fs_watch_start,
             crate::features::vault::watcher::commands::fs_watch_stop,
             crate::integration::connector::commands::connector_get_status,

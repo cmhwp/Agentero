@@ -18,9 +18,20 @@ pub struct RemotePersonal {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteOrgQuota {
+    pub id: String,
+    pub name: String,
+    pub role: String,
+    pub shared_pool_used_bytes: u64,
+    pub shared_pool_limit_bytes: u64,
+    pub seat_used_bytes: u64,
+    pub seat_allocated_bytes: u64,
+}
+
 pub struct RemoteLibraryList {
     pub personal: RemotePersonal,
     pub libraries: Vec<ServerLibrary>,
+    pub organizations: Vec<RemoteOrgQuota>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -47,6 +58,8 @@ struct ErrorBody {
 struct LibraryListBody {
     personal: PersonalBody,
     libraries: Vec<LibraryBody>,
+    #[serde(default)]
+    organizations: Vec<OrgQuotaBody>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,6 +76,24 @@ struct LibraryBody {
     id: String,
     display_name: String,
     cloud_bytes: u64,
+    #[serde(default)]
+    billing_source: Option<String>,
+    #[serde(default)]
+    billing_org_id: Option<String>,
+    #[serde(default)]
+    owned: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OrgQuotaBody {
+    id: String,
+    name: String,
+    role: String,
+    shared_pool_used_bytes: u64,
+    shared_pool_limit_bytes: u64,
+    seat_used_bytes: u64,
+    seat_allocated_bytes: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -153,9 +184,46 @@ pub async fn fetch_libraries(api_origin: &str, token: &str) -> Result<RemoteLibr
                 id: library.id,
                 display_name: library.display_name,
                 cloud_bytes: library.cloud_bytes,
+                billing_source: library.billing_source,
+                billing_org_id: library.billing_org_id,
+                owned: library.owned,
+            })
+            .collect(),
+        organizations: body
+            .organizations
+            .into_iter()
+            .map(|org| RemoteOrgQuota {
+                id: org.id,
+                name: org.name,
+                role: org.role,
+                shared_pool_used_bytes: org.shared_pool_used_bytes,
+                shared_pool_limit_bytes: org.shared_pool_limit_bytes,
+                seat_used_bytes: org.seat_used_bytes,
+                seat_allocated_bytes: org.seat_allocated_bytes,
             })
             .collect(),
     })
+}
+
+pub async fn set_library_billing(
+    api_origin: &str,
+    token: &str,
+    id: &str,
+    billing_source: &str,
+    billing_org_id: Option<&str>,
+) -> Result<(), AppError> {
+    let response = request(
+        reqwest::Method::PATCH,
+        &endpoint(api_origin, &format!("/api/libraries/{id}/billing")),
+        token,
+        Some(serde_json::json!({
+            "billingSource": billing_source,
+            "billingOrgId": billing_org_id,
+        })),
+    )
+    .await?;
+    let _: serde_json::Value = read_envelope(response).await?;
+    Ok(())
 }
 
 pub async fn register_library(

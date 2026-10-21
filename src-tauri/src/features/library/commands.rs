@@ -63,6 +63,21 @@ pub struct LibraryListItem {
     pub limit_bytes: Option<u64>,
     pub cloud_mode: Option<String>,
     pub sync_error: Option<String>,
+    pub billing_source: Option<String>,
+    pub billing_org_id: Option<String>,
+    pub owned: bool,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryOrgQuota {
+    pub id: String,
+    pub name: String,
+    pub role: String,
+    pub shared_pool_used_bytes: u64,
+    pub shared_pool_limit_bytes: u64,
+    pub seat_used_bytes: u64,
+    pub seat_allocated_bytes: u64,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -75,6 +90,7 @@ pub struct LibraryAccountSnapshot {
     pub plan_version: Option<i32>,
     pub remote_error: Option<String>,
     pub libraries: Vec<LibraryListItem>,
+    pub organizations: Vec<LibraryOrgQuota>,
 }
 
 #[derive(Debug, Deserialize, specta::Type)]
@@ -107,6 +123,15 @@ pub struct LibraryConnectArgs {
     pub recent_paths: Vec<String>,
 }
 
+#[derive(Debug, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryBillingArgs {
+    pub id: String,
+    pub billing_source: String,
+    pub billing_org_id: Option<String>,
+    pub recent_paths: Vec<String>,
+}
+
 fn validate_name(name: &str) -> Result<String, AppError> {
     let trimmed = name.trim();
     let chars = trimmed.chars().count();
@@ -123,6 +148,18 @@ fn validate_id(id: &str) -> Result<String, AppError> {
         return Err(AppError::message("Library id must be 1–128 characters"));
     }
     Ok(trimmed.to_string())
+}
+
+fn org_from(org: library::RemoteOrgQuota) -> LibraryOrgQuota {
+    LibraryOrgQuota {
+        id: org.id,
+        name: org.name,
+        role: org.role,
+        shared_pool_used_bytes: org.shared_pool_used_bytes,
+        shared_pool_limit_bytes: org.shared_pool_limit_bytes,
+        seat_used_bytes: org.seat_used_bytes,
+        seat_allocated_bytes: org.seat_allocated_bytes,
+    }
 }
 
 fn user_from(user: RemoteUser) -> LibraryUser {
@@ -159,6 +196,9 @@ fn item_from(row: LibraryRow, quota: &BTreeMap<String, LibraryQuota>) -> Library
         limit_bytes: recorded.map(|item| item.limit_bytes),
         cloud_mode: recorded.map(|item| item.mode.clone()),
         sync_error: recorded.and_then(|item| item.message.clone()),
+        billing_source: row.billing_source,
+        billing_org_id: row.billing_org_id,
+        owned: row.owned,
     }
 }
 
@@ -190,6 +230,7 @@ fn finish(
     plan_version: Option<i32>,
     remote_error: Option<String>,
     rows: Vec<LibraryRow>,
+    organizations: Vec<LibraryOrgQuota>,
     show_quota: bool,
 ) -> LibraryAccountSnapshot {
     let quota = if show_quota {
@@ -205,6 +246,7 @@ fn finish(
         plan_version,
         remote_error,
         libraries: rows.into_iter().map(|row| item_from(row, &quota)).collect(),
+        organizations,
     }
 }
 
@@ -213,7 +255,17 @@ async fn snapshot(recent_paths: &[String]) -> Result<LibraryAccountSnapshot, App
     let map = library::load()?;
     let Some(token) = session::load_token()? else {
         let rows = merge_libraries(&map, &recent, None);
-        return Ok(finish(false, None, 0, None, None, None, rows, false));
+        return Ok(finish(
+            false,
+            None,
+            0,
+            None,
+            None,
+            None,
+            rows,
+            Vec::new(),
+            false,
+        ));
     };
     let origin = session::api_origin();
     let user = match library::fetch_session(&origin, &token).await {
@@ -221,12 +273,32 @@ async fn snapshot(recent_paths: &[String]) -> Result<LibraryAccountSnapshot, App
         Ok(None) => {
             session::clear_token()?;
             let rows = merge_libraries(&map, &recent, None);
-            return Ok(finish(false, None, 0, None, None, None, rows, false));
+            return Ok(finish(
+                false,
+                None,
+                0,
+                None,
+                None,
+                None,
+                rows,
+                Vec::new(),
+                false,
+            ));
         }
         Err(error) if error.code() == "unauthorized" => {
             session::clear_token()?;
             let rows = merge_libraries(&map, &recent, None);
-            return Ok(finish(false, None, 0, None, None, None, rows, false));
+            return Ok(finish(
+                false,
+                None,
+                0,
+                None,
+                None,
+                None,
+                rows,
+                Vec::new(),
+                false,
+            ));
         }
         Err(error) => {
             let rows = merge_libraries(&map, &recent, None);
@@ -238,12 +310,14 @@ async fn snapshot(recent_paths: &[String]) -> Result<LibraryAccountSnapshot, App
                 None,
                 Some(error.to_string()),
                 rows,
+                Vec::new(),
                 true,
             ));
         }
     };
     match library::fetch_libraries(&origin, &token).await {
         Ok(remote) => {
+            let organizations = remote.organizations.into_iter().map(org_from).collect();
             let rows = merge_libraries(&map, &recent, Some(&remote.libraries));
             refresh_managed_quota(&rows, &origin, &token).await;
             Ok(finish(
@@ -254,13 +328,24 @@ async fn snapshot(recent_paths: &[String]) -> Result<LibraryAccountSnapshot, App
                 remote.personal.plan_version,
                 None,
                 rows,
+                organizations,
                 true,
             ))
         }
         Err(error) if error.code() == "unauthorized" => {
             session::clear_token()?;
             let rows = merge_libraries(&map, &recent, None);
-            Ok(finish(false, None, 0, None, None, None, rows, false))
+            Ok(finish(
+                false,
+                None,
+                0,
+                None,
+                None,
+                None,
+                rows,
+                Vec::new(),
+                false,
+            ))
         }
         Err(error) => {
             let rows = merge_libraries(&map, &recent, None);
@@ -272,6 +357,7 @@ async fn snapshot(recent_paths: &[String]) -> Result<LibraryAccountSnapshot, App
                 None,
                 Some(error.to_string()),
                 rows,
+                Vec::new(),
                 true,
             ))
         }
@@ -468,6 +554,54 @@ pub async fn library_connect(
     command_result(result)
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn library_set_billing(
+    app: AppHandle,
+    service: State<'_, SyncService>,
+    args: LibraryBillingArgs,
+) -> Result<ApiResult<LibraryAccountSnapshot>, String> {
+    let result = set_billing(args).await;
+    if result.is_ok() {
+        service.start_managed_libraries(&app);
+    }
+    command_result(result)
+}
+
+async fn set_billing(args: LibraryBillingArgs) -> Result<LibraryAccountSnapshot, AppError> {
+    let id = validate_id(&args.id)?;
+    let source = args.billing_source.trim();
+    if source != "personal" && source != "org_grant" {
+        return Err(AppError::message(
+            "Choose a personal library or an organization seat",
+        ));
+    }
+    if source == "personal" && args.billing_org_id.is_some() {
+        return Err(AppError::message("A personal library has no organization"));
+    }
+    if source == "org_grant"
+        && args
+            .billing_org_id
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .is_empty()
+    {
+        return Err(AppError::message("Choose an organization"));
+    }
+    let token = session::load_token()?
+        .ok_or_else(|| AppError::message("Sign in before changing library billing"))?;
+    library::set_library_billing(
+        &session::api_origin(),
+        &token,
+        &id,
+        source,
+        args.billing_org_id.as_deref(),
+    )
+    .await?;
+    snapshot(&args.recent_paths).await
+}
+
 async fn connect(args: LibraryConnectArgs) -> Result<LibraryAccountSnapshot, AppError> {
     let id = validate_id(&args.id)?;
     let name = validate_name(&args.name)?;
@@ -476,7 +610,9 @@ async fn connect(args: LibraryConnectArgs) -> Result<LibraryAccountSnapshot, App
         .ok_or_else(|| AppError::message("Sign in before connecting a library"))?;
     let remote = library::fetch_libraries(&session::api_origin(), &token).await?;
     if !remote.libraries.iter().any(|library| library.id == id) {
-        return Err(AppError::message("This account does not own that library"));
+        return Err(AppError::message(
+            "This account does not include that library",
+        ));
     }
     match read_vault_id(&dir) {
         Some(existing) if existing == id => {}

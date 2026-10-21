@@ -212,7 +212,11 @@
 			"pasteToggle": "Paste session token",
 			"pastePlaceholder": "Session token",
 			"pasteSubmit": "Use token",
-			"empty": "No libraries yet."
+			"empty": "No libraries yet.",
+			"billingPersonal": "Personal cloud",
+			"billingOrg": "{{name}} seat",
+			"billingShared": "Shared pool",
+			"billingLabel": "Cloud billing"
 		}
 	},
 	"confirm": {
