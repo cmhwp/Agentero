@@ -76,3 +76,11 @@ cargo test -p agentero-core   # tauri 无关基础层（crates/agentero-core）
 | **Bug 复盘** | 历史 Bug 分析（不删除） | [docs/bug_fix/](docs/bug_fix/) |
 
 约定：已实现按功能写在 `docs/frontend/` / `docs/backend/`；未实现草稿在 `docs/development/`。
+
+## Cursor Cloud specific instructions
+
+- 启动时 `pnpm dev` 监听 `http://127.0.0.1:1420`。这是没有原生 Host 的浏览器壳，会停在 “No vault open”，并提示改用 `pnpm tauri dev`。
+- 无头验收走 CLI：`cargo run -p agentero-cli -- vault create <path> --json`，再用 `cargo run -p agentero-cli -- vault list --json` 确认目录和 `.agentero/catalog.sqlite`。
+- Rust stable（当前 1.99）用 lld 链接，不会搜索 GCC 私有目录里的 `libstdc++.so`。环境安装脚本会把 `g++ -print-file-name=libstdc++.so` 链到 `/usr/lib/x86_64-linux-gnu/libstdc++.so`。缺这个链接时，`agentero-cli` 和桌面 crate 会在最后一步报 `unable to find library -lstdc++`。
+- Linux 桌面依赖与发布工作流一致：`libwebkit2gtk-4.1-dev`、`libayatana-appindicator3-dev`、`librsvg2-dev`、`patchelf`。Node 22 与 `pnpm@11.5.3`（`packageManager`）已由 corepack 提供。
+- `src-tauri/tauri.conf.json` 的 `bundle.resources` 包含 gitignore 的 `pdfium/*` 和 `adapters/**/*`。直接 `cargo check -p agentero` 之前要先 `pnpm pdfium:stage` 和 `pnpm adapters:stage`（`pnpm tauri dev` 的 `beforeDevCommand` 会自己跑）。
