@@ -3,6 +3,7 @@ import {
 	ChevronRight,
 	Database,
 	Download,
+	FolderKanban,
 	Globe,
 	Library,
 	Link2,
@@ -410,6 +411,9 @@ function SkillTreeRow({
 }
 
 function VaultRootIcon({ face }: { face: VaultRootFace }) {
+	if (face === "projects") {
+		return <FolderKanban className="size-4 text-violet-500" aria-hidden />;
+	}
 	const Icon =
 		face === "notes" ? Notebook : face === "thesis" ? ScrollText : Database;
 	return <Icon className="size-4 text-muted-foreground" aria-hidden />;

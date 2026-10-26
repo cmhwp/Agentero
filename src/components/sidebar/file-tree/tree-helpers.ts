@@ -18,9 +18,14 @@ export const pathKey = normalizePathKey;
 /**
  * Product folders at the vault root. The sidebar shows an icon and a
  * translated label; the directory name on disk stays `notes` / `thesis` /
- * `data`. A same-named folder anywhere deeper keeps its real name.
+ * `data` / `projects`. A same-named folder anywhere deeper keeps its real name.
  */
-export const VAULT_ROOT_FACES = ["notes", "thesis", "data"] as const;
+export const VAULT_ROOT_FACES = [
+	"notes",
+	"thesis",
+	"data",
+	"projects",
+] as const;
 export type VaultRootFace = (typeof VAULT_ROOT_FACES)[number];
 
 const VAULT_ROOT_FACE_SET = new Set<string>(VAULT_ROOT_FACES);
@@ -29,6 +34,7 @@ export const VAULT_ROOT_LABEL_KEY = {
 	notes: "fileTree.vaultRoot.notes",
 	thesis: "fileTree.vaultRoot.thesis",
 	data: "fileTree.vaultRoot.data",
+	projects: "fileTree.vaultRoot.projects",
 } as const;
 
 export function vaultRootFace(
