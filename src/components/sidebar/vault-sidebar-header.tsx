@@ -56,6 +56,7 @@ import { displayPath } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import { inferLookupSource } from "@/lib/paper/import-actions";
 import { formatShortcutById } from "@/lib/shell/shortcuts";
+import { remoteVaultSurfaceEnabled } from "@/lib/shell/visibility";
 import { vaultDisplayName } from "@/lib/vault";
 import {
 	getRecentRemoteVaults,
@@ -144,11 +145,11 @@ export const VaultSidebarHeader = memo(function VaultSidebarHeader({
 	const { isBlockedByIme, compositionProps } = useImeGuard();
 	const [remoteDialogOpen, setRemoteDialogOpen] = useState(false);
 	const [recentRemotes, setRecentRemotes] = useState<RecentRemoteVault[]>(() =>
-		getRecentRemoteVaults(),
+		remoteVaultSurfaceEnabled ? getRecentRemoteVaults() : [],
 	);
 
 	const refreshRecentRemotes = useCallback(() => {
-		setRecentRemotes(getRecentRemoteVaults());
+		setRecentRemotes(remoteVaultSurfaceEnabled ? getRecentRemoteVaults() : []);
 	}, []);
 
 	const isActiveRemote = useCallback(

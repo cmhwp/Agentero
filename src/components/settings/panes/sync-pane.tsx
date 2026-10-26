@@ -48,6 +48,7 @@ import { openExternalUrl } from "@/lib/core/open-external";
 import { isTauri } from "@/lib/core/tauri";
 import { toSafeDisposer } from "@/lib/core/tauri-events";
 import { cn } from "@/lib/core/utils";
+import { cloudSyncSurfaceEnabled } from "@/lib/shell/visibility";
 import {
 	emptySyncConfig,
 	isSyncProgressPhase,
@@ -156,6 +157,9 @@ const BACKEND_OPTIONS = [
 	{ value: "git", labelKey: "sync.backendGit" },
 ] as const;
 
+// Personal fork hides S3/WebDAV; Git is the default and only new-config choice.
+const DEFAULT_BACKEND = cloudSyncSurfaceEnabled ? "s3" : "git";
+
 export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 	const { t } = useTranslation("settings");
 	const localVault =
@@ -164,7 +168,9 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 			: null;
 
 	const [status, setStatus] = useState<SyncStatus | null>(null);
-	const [form, setForm] = useState<SyncBackendConfig>(emptySyncConfig());
+	const [form, setForm] = useState<SyncBackendConfig>(
+		emptySyncConfig(DEFAULT_BACKEND),
+	);
 	const [saving, setSaving] = useState(false);
 	const [syncing, setSyncing] = useState(false);
 	const [progress, setProgress] = useState<SyncProgressEvent | null>(null);
@@ -316,7 +322,7 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 		try {
 			await syncDisconnect(localVault);
 			setStatus(null);
-			setForm(emptySyncConfig());
+			setForm(emptySyncConfig(DEFAULT_BACKEND));
 			setSyncError(null);
 			void refresh().catch(() => undefined);
 		} catch (error) {
@@ -454,7 +460,12 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									{BACKEND_OPTIONS.map((option) => (
+									{BACKEND_OPTIONS.filter(
+										(option) =>
+											cloudSyncSurfaceEnabled ||
+											option.value === "git" ||
+											option.value === form.backend,
+									).map((option) => (
 										<SelectItem key={option.value} value={option.value}>
 											{t(option.labelKey)}
 										</SelectItem>

@@ -40,9 +40,9 @@ import {
 	broadcastOnboardingRequest,
 	broadcastTourRequest,
 } from "@/lib/onboarding/api";
-import { pluginsSurfaceEnabled } from "@/lib/plugins/visibility";
 import type { AppSettings } from "@/lib/settings";
 import { closeSettingsWindow } from "@/lib/shell/settings-window";
+import { isSettingsSectionVisible } from "@/lib/shell/visibility";
 import {
 	getRemoteSessionMeta,
 	isRemoteVaultHandle,
@@ -75,8 +75,7 @@ const PANE_LOADERS = {
  * cached, so the matching `lazy()` below resolves without a second request.
  */
 export function preloadSettingsPane(section: string): Promise<unknown> {
-	const requested =
-		!pluginsSurfaceEnabled && section === "plugins" ? "general" : section;
+	const requested = isSettingsSectionVisible(section) ? section : "general";
 	const load =
 		PANE_LOADERS[requested as SettingsSection] ?? PANE_LOADERS.general;
 	return load();
@@ -191,11 +190,10 @@ export function SettingsContent({
 	const fallbackTitleId = useId();
 	const headingId = titleId ?? fallbackTitleId;
 	const navItems = useMemo(
-		() => NAV.filter((item) => pluginsSurfaceEnabled || item.id !== "plugins"),
+		() => NAV.filter((item) => isSettingsSectionVisible(item.id)),
 		[],
 	);
-	const activeSection =
-		pluginsSurfaceEnabled || section !== "plugins" ? section : "general";
+	const activeSection = isSettingsSectionVisible(section) ? section : "general";
 
 	useEffect(() => {
 		if (activeSection !== section) onSectionChange(activeSection);
@@ -223,7 +221,7 @@ export function SettingsContent({
 	useEffect(() => {
 		let cancelled = false;
 		const sections = (Object.keys(PANE_LOADERS) as SettingsSection[]).filter(
-			(id) => pluginsSurfaceEnabled || id !== "plugins",
+			isSettingsSectionVisible,
 		);
 		let i = 0;
 		let timer: ReturnType<typeof setTimeout> | null = null;
@@ -599,17 +597,20 @@ export function SettingsContent({
 							</Suspense>
 						</div>
 					)}
-					{visitedSections.includes("remote-access") && (
-						<div
-							data-settings-pane
-							data-active={activeSection === "remote-access" ? "true" : "false"}
-							hidden={activeSection !== "remote-access"}
-						>
-							<Suspense fallback={<PaneFallback />}>
-								<RemoteAccessPane vaultPath={vaultPath} />
-							</Suspense>
-						</div>
-					)}
+					{isSettingsSectionVisible("remote-access") &&
+						visitedSections.includes("remote-access") && (
+							<div
+								data-settings-pane
+								data-active={
+									activeSection === "remote-access" ? "true" : "false"
+								}
+								hidden={activeSection !== "remote-access"}
+							>
+								<Suspense fallback={<PaneFallback />}>
+									<RemoteAccessPane vaultPath={vaultPath} />
+								</Suspense>
+							</div>
+						)}
 					{visitedSections.includes("sync") && (
 						<div
 							data-settings-pane
@@ -621,17 +622,18 @@ export function SettingsContent({
 							</Suspense>
 						</div>
 					)}
-					{pluginsSurfaceEnabled && visitedSections.includes("plugins") && (
-						<div
-							data-settings-pane
-							data-active={activeSection === "plugins" ? "true" : "false"}
-							hidden={activeSection !== "plugins"}
-						>
-							<Suspense fallback={<PaneFallback />}>
-								<PluginsPane vaultPath={vaultPath} />
-							</Suspense>
-						</div>
-					)}
+					{isSettingsSectionVisible("plugins") &&
+						visitedSections.includes("plugins") && (
+							<div
+								data-settings-pane
+								data-active={activeSection === "plugins" ? "true" : "false"}
+								hidden={activeSection !== "plugins"}
+							>
+								<Suspense fallback={<PaneFallback />}>
+									<PluginsPane vaultPath={vaultPath} />
+								</Suspense>
+							</div>
+						)}
 					{visitedSections.includes("experimental") && (
 						<div
 							data-settings-pane

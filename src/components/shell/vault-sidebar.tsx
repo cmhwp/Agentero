@@ -45,6 +45,7 @@ import {
 	readPaper,
 } from "@/lib/paper/library-actions";
 import { setZoteroOpen, setZoteroSyncOpen } from "@/lib/shell/ui-store";
+import { remoteVaultSurfaceEnabled } from "@/lib/shell/visibility";
 import {
 	joinVaultPath,
 	treeFindNode,
@@ -266,7 +267,9 @@ export function VaultSidebar() {
 					onRemoveRecent={removeRecent}
 					onOpenVault={onOpenVaultClick}
 					onCreateVault={onCreateVaultClick}
-					onOpenRemoteVault={onOpenRemoteVaultClick}
+					onOpenRemoteVault={
+						remoteVaultSurfaceEnabled ? onOpenRemoteVaultClick : undefined
+					}
 					onMigrateZotero={onMigrateZotero}
 					onSyncZotero={onSyncZotero}
 				/>

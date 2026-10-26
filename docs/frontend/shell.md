@@ -97,6 +97,8 @@
 
 桌面设置里的「插件」入口、命令面板里的开发插件加载，以及打开 Vault 后的自动激活目前先隐藏。开关在 `src/lib/plugins/visibility.ts` 的 `pluginsSurfaceEnabled`；设置页、命令和宿主启动代码都还在，后端安装与执行路径未删。改回 `true` 后，「设置 → 插件」继续管理本地安装、按 Vault 授权及配置。插件通过命令 registry 和三个菜单贡献位接入；菜单点击传入对象上下文，切换 Vault 时撤销注册和在途调用。开发版另提供临时只读目录加载。论文 Paper Info 的 GitHub 代码入口也提供操作菜单：打开外链、复制或编辑保存 `code_repo`，以及克隆到论文目录后直接打开 README / 代码文件。详见 [本地插件系统](../backend/plugins.md)。
 
+个人版另在 `src/lib/shell/visibility.ts` 隐藏三处未使用的入口：`remoteVaultSurfaceEnabled`（欢迎页 / Vault 切换菜单的「打开远程…」、最近远程列表与连接对话框）、`remoteAccessSurfaceEnabled`（设置 → 远程访问，即手机配对与 Bridge）、`cloudSyncSurfaceEnabled`（设置 → 同步只提供 Git 后端，已配置的 S3/WebDAV 仍可查看与断开）。设置窗口统一经 `isSettingsSectionVisible` 过滤导航、重定向与预加载，插件开关也并入此处。Host 命令全部保留，改回 `true` 即恢复原界面。
+
 命令与菜单共享的 `MenuContext` 定义在 `src/lib/shell/commands/types.ts`，菜单模块保留类型再导出供现有调用方使用。类型模块不引用菜单实现，避免与命令 registry 形成循环依赖；`pnpm deps:check` 会检查这类依赖环。
 
 ## 设计约定
