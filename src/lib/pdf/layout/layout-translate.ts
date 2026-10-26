@@ -173,7 +173,10 @@ export function isAsideTextLayoutLabel(label: string): boolean {
 export function isReferenceSectionTitle(text: string): boolean {
 	const t = text.trim();
 	if (!t || t.length > 64) return false;
-	return /^(references?|bibliography|works\s+cited|参考文[献獻])\b/i.test(t);
+	return (
+		/^(references?|bibliography|works\s+cited)\b/i.test(t) ||
+		/^参考文[献獻](?:\s|$)/.test(t)
+	);
 }
 
 /**
@@ -193,7 +196,15 @@ export function listTranslatableLayoutRegions(
 		(r) => isReferenceLayoutLabel(r.label) && r.score >= minScore,
 	);
 	const out: LayoutTranslateRegion[] = [];
-	for (const r of regions) {
+	let referenceSectionStarted = false;
+	const orderedRegions = [...regions].sort(
+		(a, b) =>
+			a.pageIndex - b.pageIndex ||
+			a.readingOrder - b.readingOrder ||
+			a.bbox.y - b.bbox.y ||
+			a.bbox.x - b.bbox.x,
+	);
+	for (const r of orderedRegions) {
 		// Never translate algorithm detections themselves.
 		if (isAlgorithmLayoutKind(r.kind)) continue;
 		// Bibliography entries from the layout model.
@@ -211,7 +222,15 @@ export function listTranslatableLayoutRegions(
 		const full = normalizeLayoutSourceText(raw, r.kind);
 		if (!full) continue;
 		if (isAlgorithmTitleText(full)) continue;
-		if (isReferenceSectionTitle(full)) continue;
+		if (isReferenceSectionTitle(full)) {
+			// Once the bibliography heading is encountered, keep all following
+			// text regions out of bulk translation. This catches PDFs whose
+			// layout model labels bibliography entries as plain `text` rather
+			// than `reference_content`.
+			referenceSectionStarted = true;
+			continue;
+		}
+		if (referenceSectionStarted) continue;
 		out.push({
 			id: r.id,
 			pageIndex: r.pageIndex,

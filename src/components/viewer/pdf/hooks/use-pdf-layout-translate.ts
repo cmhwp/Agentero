@@ -666,7 +666,13 @@ export function usePdfLayoutTranslate({
 						sidecar,
 					)
 				: sidecar.items.map((item) => ({ ...item, status: "done" as const }));
-			setLayoutTranslateJob({ status: "done", items });
+			// A sidecar only stores completed blocks. When the previous run was
+			// interrupted, the companion pane must expose the unfinished blocks as
+			// resumable instead of treating the visible subset as a finished job.
+			setLayoutTranslateJob({
+				status: hasPendingLayoutTranslateItems(items) ? "partial" : "done",
+				items,
+			});
 		});
 		return () => {
 			cancelled = true;

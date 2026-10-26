@@ -228,6 +228,33 @@ describe("listTranslatableLayoutRegions", () => {
 		expect(list.map((r) => r.id)).toEqual(["body"]);
 	});
 
+	it("stops translating plain text regions after a bibliography heading", () => {
+		const list = listTranslatableLayoutRegions([
+			region({
+				id: "body",
+				kind: "text",
+				pageIndex: 0,
+				readingOrder: 1,
+				text: "Introduction body.",
+			}),
+			region({
+				id: "heading",
+				kind: "header",
+				pageIndex: 0,
+				readingOrder: 2,
+				text: "参考文献",
+			}),
+			region({
+				id: "plain-ref",
+				kind: "text",
+				pageIndex: 0,
+				readingOrder: 3,
+				text: "[1] Smith et al. A paper. 2024.",
+			}),
+		]);
+		expect(list.map((r) => r.id)).toEqual(["body"]);
+	});
+
 	it("skips aside_text side-margin regions", () => {
 		const list = listTranslatableLayoutRegions([
 			region({

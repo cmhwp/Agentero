@@ -575,9 +575,11 @@ function PdfViewerInner({
 	const autoTranslateSelection = useSettings(
 		(s) => s.translate.autoTranslateSelection,
 	);
-	const displayMode = useSettings((s) => s.translate.displayMode);
+	// Full-document translation always lives in the companion pane. Keeping this
+	// guard at the viewer boundary prevents a stale settings snapshot from ever
+	// painting translated text over the source PDF.
+	const displayMode = "dualPane" as const;
 	const dualPaneSource = useSettings((s) => s.translate.dualPaneSource);
-	const dualPaneTranslate = displayMode === "dualPane";
 	const smartHighlightEnabled = useSettings((s) => s.decision.smartHighlight);
 	const paperMeta = useMemo(() => {
 		if (paperMetaProp) return paperMetaProp;
@@ -1900,14 +1902,12 @@ function PdfViewerInner({
 			hoverableRegionsByPage,
 			rawRegionsByPage,
 			layoutOverlayVisible,
-			layoutTranslateItemsByPage:
-				translationPane || !dualPaneTranslate
-					? layoutTranslateItemsByPage
-					: new Map(),
-			layoutTranslatePageStateByPage:
-				translationPane || !dualPaneTranslate
-					? layoutTranslatePageStateByPage
-					: new Map(),
+			layoutTranslateItemsByPage: translationPane
+				? layoutTranslateItemsByPage
+				: new Map(),
+			layoutTranslatePageStateByPage: translationPane
+				? layoutTranslatePageStateByPage
+				: new Map(),
 			sentenceRectsByItemId,
 			linkInkByKey,
 			glyphRunsByPage,
@@ -1919,7 +1919,6 @@ function PdfViewerInner({
 			layoutTranslateItemsByPage,
 			layoutTranslatePageStateByPage,
 			translationPane,
-			dualPaneTranslate,
 			sentenceRectsByItemId,
 			linkInkByKey,
 			glyphRunsByPage,
