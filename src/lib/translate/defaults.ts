@@ -10,8 +10,10 @@ export const DEFAULT_TRANSLATE_SETTINGS: TranslateSettings = {
 	sourceLang: "auto",
 	providerConfigs: {},
 	autoTranslateSelection: false,
-	dualPaneTranslate: false,
-	displayMode: "overlay",
+	dualPaneTranslate: true,
+	// Keep the source PDF intact. Full-document translations open in the
+	// companion panel next to the source instead of painting over the page.
+	displayMode: "dualPane",
 	dualPaneSource: "pdf",
 	agentId: "",
 	modelId: "",

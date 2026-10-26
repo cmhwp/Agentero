@@ -690,10 +690,12 @@ function normalizeTranslateSettings(
 		base.autoTranslateSelection = raw.autoTranslateSelection;
 	}
 	// Migrate legacy dualPaneTranslate boolean to the new displayMode pair.
+	// The source PDF is always kept intact in the personal workflow, so older
+	// overlay settings are intentionally promoted to the companion pane.
 	const legacyDualPane = (raw as { dualPaneTranslate?: boolean })
 		.dualPaneTranslate;
 	if (typeof legacyDualPane === "boolean") {
-		base.displayMode = legacyDualPane ? "dualPane" : "overlay";
+		base.displayMode = "dualPane";
 		base.dualPaneSource = "pdf";
 	}
 	if (
@@ -702,7 +704,7 @@ function normalizeTranslateSettings(
 			raw.displayMode as TranslationDisplayMode,
 		)
 	) {
-		base.displayMode = raw.displayMode as TranslationDisplayMode;
+		base.displayMode = "dualPane";
 	}
 	if (
 		raw.dualPaneSource &&

@@ -464,9 +464,6 @@ export function TranslatePane({
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
-							<SelectItem value="overlay">
-								{t("translate.displayMode.overlay")}
-							</SelectItem>
 							<SelectItem value="dualPane">
 								{t("translate.displayMode.dualPane")}
 							</SelectItem>
