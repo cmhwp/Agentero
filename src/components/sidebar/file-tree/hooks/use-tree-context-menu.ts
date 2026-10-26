@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import { presentAgentComposer } from "@/lib/agent/composer-focus";
 import { broadcastAgentAttachContext } from "@/lib/agent/context-attach";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
+import { notifyError } from "@/lib/core/notify";
 import { displayPath } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import {
@@ -68,8 +69,6 @@ function paperDirectoryCatalogId(
 export type TreeContextMenuState = {
 	/** Non-null while the menu is open — spread onto `TreeContextMenuPortal`. */
 	menuProps: TreeContextMenuPortalProps | null;
-	/** Reveal / open-in-terminal failure shown under the tree. */
-	revealError: string | null;
 	handleContextMenuPath: (path: string, event: ReactMouseEvent) => void;
 };
 
@@ -135,7 +134,6 @@ export function useTreeContextMenu({
 }): TreeContextMenuState {
 	const { t } = useTranslation("sidebar");
 	const [menu, setMenu] = useState<TreeContextMenu | null>(null);
-	const [revealError, setRevealError] = useState<string | null>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
 
 	const close = useCallback(() => setMenu(null), []);
@@ -155,7 +153,6 @@ export function useTreeContextMenu({
 			event.preventDefault();
 			event.stopPropagation();
 			prepareContextSelection(path);
-			setRevealError(null);
 			setMenu({ path, x: event.clientX, y: event.clientY });
 		},
 		[createDraft, renameDraft, prepareContextSelection],
@@ -166,12 +163,11 @@ export function useTreeContextMenu({
 			setMenu(null);
 			if (!canRevealPath(path)) return;
 			if (!isTauri()) {
-				setRevealError(t("fileTree.revealDesktopOnly"));
+				notifyError(t("fileTree.revealDesktopOnly"));
 				return;
 			}
-			setRevealError(null);
 			void revealInFileManager(path).catch(() => {
-				setRevealError(t("fileTree.revealFailed"));
+				notifyError(t("fileTree.revealFailed"));
 			});
 		},
 		[t],
@@ -182,12 +178,11 @@ export function useTreeContextMenu({
 			setMenu(null);
 			if (!canRevealPath(path)) return;
 			if (!isTauri()) {
-				setRevealError(t("fileTree.openInTerminalDesktopOnly"));
+				notifyError(t("fileTree.openInTerminalDesktopOnly"));
 				return;
 			}
-			setRevealError(null);
 			void openInTerminal(path).catch(() => {
-				setRevealError(t("fileTree.openInTerminalFailed"));
+				notifyError(t("fileTree.openInTerminalFailed"));
 			});
 		},
 		[t],
@@ -216,7 +211,7 @@ export function useTreeContextMenu({
 	}, []);
 
 	if (!menu) {
-		return { menuProps: null, revealError, handleContextMenuPath };
+		return { menuProps: null, handleContextMenuPath };
 	}
 
 	const targets = pathsForAction(menu.path);
@@ -377,5 +372,5 @@ export function useTreeContextMenu({
 				: undefined,
 	};
 
-	return { menuProps, revealError, handleContextMenuPath };
+	return { menuProps, handleContextMenuPath };
 }
