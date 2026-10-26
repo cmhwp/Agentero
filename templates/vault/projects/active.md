@@ -2,7 +2,7 @@
 
 ## Research question
 
-- 
+-
 
 ## Scope and milestones
 
@@ -17,8 +17,8 @@
 
 ## Decisions
 
-- 
+-
 
 ## Open questions
 
-- 
+-
