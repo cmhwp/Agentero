@@ -54,6 +54,9 @@ ResearchVault/
 │   └── 03 Markdown 与双链.md
 ├── .agents/
 │   └── skills/
+├── projects/
+│   ├── README.md
+│   └── active.md
 ├── AGENTS.md
 └── .agentero/
     └── catalog.sqlite

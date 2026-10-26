@@ -30,10 +30,13 @@ import {
 import { LibraryTableHeader } from "@/components/library/library-table-header";
 import { Button } from "@/components/ui/button";
 import { useDebouncedCallback } from "@/hooks/use-debounce";
+import { errorText } from "@/lib/core/error";
+import { notifyError } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
 import type { PaperLibraryRow, PaperMetadata } from "@/lib/paper";
 import { filterPapersByScope } from "@/lib/paper/api";
 import {
+	createLiteratureReviewCard,
 	refreshPaperMetadata,
 	syncLibraryPublication,
 } from "@/lib/paper/library-actions";
@@ -47,6 +50,7 @@ import {
 import { setHoveredPaperPath } from "@/lib/shell/ui-store";
 import { joinVaultPath } from "@/lib/vault";
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
+import { searchVault } from "@/lib/vault/search";
 
 export type PapersLibraryProps = {
 	/** Full catalog list (or pre-scoped); further filtered by `scopePath`. */
@@ -167,6 +171,14 @@ export function PapersLibrary({
 
 	const canEditMeta =
 		Boolean(vaultPath) && !isRemoteVaultHandle(vaultPath ?? "");
+	const handleCreateReviewCard = useCallback(
+		(paperAbsPath: string, paper: PaperMetadata) => {
+			void createLiteratureReviewCard(paperAbsPath, paper).catch((error) =>
+				notifyError(errorText(error)),
+			);
+		},
+		[],
+	);
 
 	/** Folder scope first (cheap path-prefix filter on in-memory catalog). */
 	const scopedPapers = useMemo(
@@ -253,6 +265,47 @@ export function PapersLibrary({
 
 	const normalizedQuery = (inputValue ?? "").trim().toLocaleLowerCase();
 	const tagFilterSet = useMemo(() => new Set(tagFilter), [tagFilter]);
+	const [contentMatchPaths, setContentMatchPaths] = useState<Set<string>>(
+		() => new Set(),
+	);
+
+	/**
+	 * Library search starts with catalog metadata, then expands to NOTES.md and
+	 * other Markdown content through the existing Host full-text search. The
+	 * short debounce keeps the catalog responsive while typing and the stale
+	 * guard prevents an older request from replacing newer results.
+	 */
+	useEffect(() => {
+		const query = normalizedQuery.trim();
+		if (query.length < 2 || !vaultPath || isRemoteVaultHandle(vaultPath)) {
+			setContentMatchPaths(new Set());
+			return;
+		}
+		let cancelled = false;
+		const timer = setTimeout(() => {
+			void searchVault({ vaultPath, query, limit: 200 })
+				.then((result) => {
+					if (cancelled) return;
+					setContentMatchPaths(
+						new Set(
+							result.hits
+								.map((hit) => hit.paperPath ?? "")
+								.filter(Boolean)
+								.map((path) =>
+									path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""),
+								),
+						),
+					);
+				})
+				.catch(() => {
+					if (!cancelled) setContentMatchPaths(new Set());
+				});
+		}, 120);
+		return () => {
+			cancelled = true;
+			clearTimeout(timer);
+		};
+	}, [normalizedQuery, vaultPath]);
 
 	/** Unique tags in the current folder scope (for the tags-column filter menu). */
 	const availableTags = useMemo(() => {
@@ -294,9 +347,14 @@ export function PapersLibrary({
 	const rows = useMemo(() => {
 		let filtered = indexedRows;
 		if (normalizedQuery) {
-			filtered = filtered.filter((row) =>
-				row.searchText.includes(normalizedQuery),
-			);
+			filtered = filtered.filter((row) => {
+				const rel = (row.paper.path ?? "")
+					.replace(/\\/g, "/")
+					.replace(/^\/+|\/+$/g, "");
+				return (
+					row.searchText.includes(normalizedQuery) || contentMatchPaths.has(rel)
+				);
+			});
 		}
 		if (tagFilterSet.size > 0) {
 			filtered = filtered.filter((row) =>
@@ -306,7 +364,14 @@ export function PapersLibrary({
 		const copy = [...filtered];
 		copy.sort((a, b) => comparePaperRows(a, b, sortKey, sortDir));
 		return copy;
-	}, [indexedRows, normalizedQuery, tagFilterSet, sortKey, sortDir]);
+	}, [
+		indexedRows,
+		normalizedQuery,
+		contentMatchPaths,
+		tagFilterSet,
+		sortKey,
+		sortDir,
+	]);
 
 	// Reorder cue: replay a quick fade when the user re-sorts or changes tag
 	// filters. Deliberately excludes the search query — per-keystroke remounts
@@ -497,6 +562,7 @@ export function PapersLibrary({
 										onOpenPaper={openPaperFromRow}
 										onRowClick={onRowClick}
 										onRefreshMetadata={handleRefreshPaperMetadata}
+										onCreateReviewCard={handleCreateReviewCard}
 										onHoverPaper={setHoveredPaperPath}
 										measureRef={rowVirtualizer.measureElement}
 									/>

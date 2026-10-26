@@ -20,6 +20,16 @@ pub const SKILLS_DIR_README: &str =
 /// Minimal LaTeX starter seeded into `thesis/` (only when the folder is absent).
 pub const THESIS_MAIN_TEX: &str = include_str!("../../../../../templates/vault/thesis/main.tex");
 
+/// Personal research-project workspace templates.
+pub const PROJECTS_README_EN: &str =
+    include_str!("../../../../../templates/vault/projects/README.md");
+pub const PROJECTS_README_ZH_CN: &str =
+    include_str!("../../../../../templates/vault/projects/README.zh-CN.md");
+pub const ACTIVE_PROJECT_EN: &str =
+    include_str!("../../../../../templates/vault/projects/active.md");
+pub const ACTIVE_PROJECT_ZH_CN: &str =
+    include_str!("../../../../../templates/vault/projects/active.zh-CN.md");
+
 // Onboarding notes and bundled skill package files are discovered by build.rs
 // and embedded here.
 include!(concat!(env!("OUT_DIR"), "/onboarding_templates.rs"));
@@ -159,7 +169,7 @@ fn seed_or_upgrade_bundled_file(
 
 /// Idempotent vault scaffold under `path` without overwriting existing user files.
 ///
-/// Creates: `papers/`, `notes/`, `data/`, `.agentero/`, `.agents/` (+ `skills/`),
+/// Creates: `papers/`, `notes/`, `data/`, `projects/`, `.agentero/`, `.agents/` (+ `skills/`),
 /// `AGENTS.md` (if missing), seeds `.agents/README.md` and bundled skills from
 /// the app template, safely upgrades managed first-party skills (frontmatter
 /// `version`), seeds localized onboarding tutorial notes under `notes/`, seeds
@@ -192,6 +202,7 @@ pub fn ensure_vault(path: &Path, locale: &str) -> Result<CreateVaultResult, AppE
         "papers",
         "notes",
         "data",
+        "projects",
         ".agentero",
         ".agents",
         ".agents/skills",
@@ -231,6 +242,30 @@ pub fn ensure_vault(path: &Path, locale: &str) -> Result<CreateVaultResult, AppE
     for (rel, content) in &onboarding_files {
         seed_file_if_missing(path, rel, content, &mut created)?;
     }
+
+    // Seed the Markdown-backed research-project workspace without overwriting
+    // an existing project index or active project file.
+    let zh = resolve_vault_locale(locale) == "zh-CN";
+    seed_file_if_missing(
+        path,
+        "projects/README.md",
+        if zh {
+            PROJECTS_README_ZH_CN
+        } else {
+            PROJECTS_README_EN
+        },
+        &mut created,
+    )?;
+    seed_file_if_missing(
+        path,
+        "projects/active.md",
+        if zh {
+            ACTIVE_PROJECT_ZH_CN
+        } else {
+            ACTIVE_PROJECT_EN
+        },
+        &mut created,
+    )?;
 
     // Seed the LaTeX manuscript starter only when `thesis/` does not exist, so
     // an existing (possibly real) manuscript directory is never touched.
@@ -299,6 +334,9 @@ mod tests {
         assert!(dir.join("papers").is_dir());
         assert!(dir.join("notes").is_dir());
         assert!(dir.join("data").is_dir());
+        assert!(dir.join("projects").is_dir());
+        assert!(dir.join("projects/README.md").is_file());
+        assert!(dir.join("projects/active.md").is_file());
         assert!(dir.join("thesis/main.tex").is_file());
         assert!(!dir.join("plans").exists());
         assert!(dir.join(".agentero").is_dir());

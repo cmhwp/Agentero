@@ -19,6 +19,7 @@ Vault/
 ├── papers/
 ├── notes/
 ├── data/             # 远端服务器数据/产物的落位目录（非论文）
+├── projects/         # 个人研究项目、任务和综述工作区（普通 Markdown）
 ├── thesis/
 │   └── main.tex      # LaTeX 起手稿（仅新建 Vault 时写入）
 ├── .agents/skills/

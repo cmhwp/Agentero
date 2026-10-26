@@ -11,6 +11,7 @@
 import {
 	BookOpen,
 	Download,
+	FileText,
 	FolderOpen,
 	MessageSquarePlus,
 	Pencil,
@@ -102,6 +103,7 @@ type LibraryPaperRowProps = {
 		paper: PaperMetadata,
 	) => void;
 	onRefreshMetadata?: (paper: PaperMetadata) => void;
+	onCreateReviewCard?: (paperAbsPath: string, paper: PaperMetadata) => void;
 	/** Preview the row in the left Paper Info panel while hovered. */
 	onHoverPaper?: (relPath: string | null) => void;
 	/** rowVirtualizer.measureElement — attached to the `<tr>`. */
@@ -120,6 +122,7 @@ export const LibraryPaperRow = memo(function LibraryPaperRow({
 	onOpenPaper,
 	onRowClick,
 	onRefreshMetadata,
+	onCreateReviewCard,
 	onHoverPaper,
 	measureRef,
 }: LibraryPaperRowProps) {
@@ -162,6 +165,12 @@ export const LibraryPaperRow = memo(function LibraryPaperRow({
 					<ContextMenuItem onSelect={() => setEditMetaDraft(p)}>
 						<Pencil className="size-3.5" />
 						{ctx.t("papersLibrary.rowEditMeta")}
+					</ContextMenuItem>
+				) : null}
+				{canEditMeta && paperAbsPath && onCreateReviewCard ? (
+					<ContextMenuItem onSelect={() => onCreateReviewCard(paperAbsPath, p)}>
+						<FileText className="size-3.5" />
+						{ctx.t("papersLibrary.createReviewCard")}
 					</ContextMenuItem>
 				) : null}
 				{canEditMeta &&

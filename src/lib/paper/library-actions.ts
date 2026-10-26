@@ -46,7 +46,7 @@ import {
 	runPaperReaderWorkflow,
 } from "@/lib/paper/reader";
 import type { FileNode } from "@/lib/vault";
-import { joinVaultPath, readVaultFile } from "@/lib/vault";
+import { joinVaultPath, readVaultFile, writeVaultFile } from "@/lib/vault";
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
 import { getVaultPath, refreshTree, vaultStore } from "@/lib/vault/store";
 import { toVaultRelative } from "@/lib/wiki";
@@ -72,6 +72,75 @@ export function editPaperMetaFromTree(paperDir: string): void {
 		? libraryStore.getState().paperMetaByRelPath.get(rel)
 		: undefined;
 	if (meta) setEditMetaDraft(meta);
+}
+
+/**
+ * Create a structured literature-review card beside the paper notes without
+ * touching the user's existing NOTES.md. The card is ordinary Markdown so it
+ * remains editable and portable with the rest of the Vault.
+ */
+export async function createLiteratureReviewCard(
+	paperAbsPath: string,
+	paper: PaperMetadata,
+): Promise<void> {
+	const cardPath = joinVaultPath(paperAbsPath, "REVIEW.md");
+	try {
+		const existing = await readVaultFile(cardPath);
+		if (existing.trim()) {
+			notifyWarning(i18n.t("sidebar:papersLibrary.reviewCardExists"));
+			return;
+		}
+	} catch {
+		// Missing card is the expected path; create it below.
+	}
+	const authors = paper.authors?.length ? paper.authors.join(", ") : "";
+	const identifiers = [paper.arxiv_id, paper.doi]
+		.filter((value): value is string => Boolean(value?.trim()))
+		.join(" · ");
+	const title =
+		paper.title ||
+		paper.id ||
+		i18n.t("sidebar:papersLibrary.reviewCard.untitled");
+	const translate = i18n.t as unknown as (
+		key: string,
+		options?: Record<string, string>,
+	) => string;
+	const t = (key: string, options?: Record<string, string>) =>
+		translate(`sidebar:papersLibrary.reviewCard.${key}`, options);
+	const content = [
+		`# ${t("title", { title })}`,
+		"",
+		`## ${t("basicInfo")}`,
+		`- ${t("authors")}：${authors}`,
+		`- ${t("identifiers")}：${identifiers}`,
+		`- ${t("source")}：${paper.source_url || ""}`,
+		"",
+		`## ${t("researchQuestion")}`,
+		"- ",
+		"",
+		`## ${t("method")}`,
+		"- ",
+		"",
+		`## ${t("experiments")}`,
+		`- ${t("dataset")}：`,
+		`- ${t("metrics")}：`,
+		`- ${t("baselines")}：`,
+		"",
+		`## ${t("conclusions")}`,
+		"- ",
+		"",
+		`## ${t("limitations")}`,
+		`- ${t("limitation")}：`,
+		`- ${t("reusable")}：`,
+		"",
+		`## ${t("relation")}`,
+		"- ",
+		"",
+	].join("\n");
+	await writeVaultFile(cardPath, content);
+	const vaultPath = getVaultPath();
+	if (vaultPath) await refreshTree(vaultPath);
+	notifySuccess(i18n.t("sidebar:papersLibrary.reviewCardCreated"));
 }
 
 /**
