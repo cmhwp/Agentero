@@ -56,7 +56,7 @@
 - Library 表格行右键"编辑元数据"；
 - 文件树论文行右键"编辑元数据"。
 
-核心字段（标题/作者/日期/DOI/arXiv/期刊）直接展示，卷期页、出版社、摘要、URL、代码仓库（`code_repo`）和 OpenReview 链接（`openreview_url`，均手动填写，无自动查找）折叠在"更多字段"。作者每行一位；日期接受 `YYYY` / `YYYY-MM` / `YYYY-MM-DD`（也容忍 `2017-06-12T00:00:00Z`、`Spring 2017` 这类松散串，由 Host 规范化），年份由日期派生；仅提交变更字段（patch）→ `paper_update_meta` → 返回完整记录替换 Library 与打开 tab 的 metadata（`paperMetaChange`，仅保留列表的 `has_pdf` 探测结果），确保清空的可选字段立即移除。OpenReview 字段可设置或清空，保存后在 Paper Info 链接区展示；标识符刷新保留该手工值，有效 HTTP(S) 地址才展示按钮。远程 Vault 暂不支持，入口隐藏。后端语义见 [../backend/catalog.md](../backend/catalog.md)。
+核心字段（标题/作者/日期/DOI/arXiv/期刊）直接展示，卷期页、出版社、摘要、URL、代码仓库（`code_repo`）和 OpenReview 链接（`openreview_url`，均手动填写，无自动查找）折叠在"更多字段"。作者每行一位；日期接受 `YYYY` / `YYYY-MM` / `YYYY-MM-DD`（也容忍 `2017-06-12T00:00:00Z`、`Spring 2017` 这类松散串，由 Host 规范化），年份由日期派生；仅提交变更字段（patch）→ `paper_update_meta` → 返回完整记录替换 Library 与打开 tab 的 metadata（`paperMetaChange`，仅保留列表的 `has_pdf` 探测结果），确保清空的可选字段立即移除。OpenReview 字段可设置或清空，保存后在 Paper Info 链接区展示；标识符刷新保留该手工值，有效 HTTP(S) 地址才展示按钮。代码仓库按钮可在 GitHub 打开、复制链接、编辑并保存链接，或显式克隆到论文目录 `code/<仓库名>/`；克隆后优先打开 README 等入口文件，仓库内的代码文件使用 CodeMirror 查看。克隆只接受公开 GitHub HTTPS/SSH 地址，不覆盖已有目录；远程 Vault 暂不支持，入口隐藏。后端语义见 [../backend/catalog.md](../backend/catalog.md)。
 
 DOI 旁有 **刷新** 按钮：按当前 DOI（或 arXiv ID）拉取权威元数据（`paper_resolve_identifier` → Translator/Crossref/arXiv Atom，再用 S2 `publicationVenue` 补期刊/会议名），只填充表单供确认，保存仍走 patch。venue 源优先级见 [../backend/academic-search-apis.md](../backend/academic-search-apis.md) §2.5。
 

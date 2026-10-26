@@ -33,7 +33,7 @@ use super::{slug_from_stem, title_from_stem, write_paper_shell_opts, NoteShellMo
 const PAPER_MARKER_FILES: &[&str] = &["NOTES.md", "PAPER.md"];
 const PAPER_MARKER_DIRS: &[&str] = &["source", "assets", "marks"];
 /// Paper-internal dir names: never scanned for nested paper units.
-const PAPER_INTERNAL_DIRS: &[&str] = &["attachments", "source", "assets", "marks"];
+const PAPER_INTERNAL_DIRS: &[&str] = &["attachments", "source", "assets", "marks", "code"];
 /// Suffixes (extension position) of browser/office in-flight downloads.
 const TEMP_DOWNLOAD_EXTS: &[&str] = &["crdownload", "part", "download", "partial", "opdownload"];
 

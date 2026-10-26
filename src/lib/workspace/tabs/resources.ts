@@ -11,6 +11,7 @@ import {
 	detectPaperDirectory,
 	findLocalPdfPath,
 	getRemoteArxivPaperByPath,
+	isPaperCodePath,
 	isPaperDirectory,
 	isRemoteArxivPath,
 	isUnderPapers,
@@ -263,6 +264,7 @@ export async function loadTabResources(
 	const looksLikeOpenableFile =
 		isViewerPath(path) ||
 		isTextOpenable(path) ||
+		(isPaperCodePath(path) && /\.[^\\/]+$/.test(path)) ||
 		(!isUnderPapers(path) && /\.[^\\/]+$/.test(path));
 	if (
 		!paperDir &&
@@ -392,6 +394,7 @@ export async function loadTabResources(
 		let pdfBytes = paperBytes;
 		let imageUrl: string | null = null;
 		let markdownSeed = "";
+		let textSeed = "";
 		let excalidrawSeed = "";
 
 		switch (viewerModeSpec(mode).resource) {
@@ -456,8 +459,12 @@ export async function loadTabResources(
 				break;
 			}
 			case "text": {
-				// Unreachable inside papers/: the path fallback for this domain is
-				// markdown, never the CodeMirror text editor.
+				try {
+					textSeed = await readVaultFile(path);
+				} catch {
+					// Keep the tab open; the editor will surface an empty seed and the
+					// watcher can retry when a checkout finishes writing.
+				}
 				break;
 			}
 		}
@@ -474,6 +481,7 @@ export async function loadTabResources(
 			notesPath,
 			notesSeed,
 			markdownSeed,
+			textSeed,
 			excalidrawSeed,
 			loaded: true,
 			didDownloadAssets: didDownload,

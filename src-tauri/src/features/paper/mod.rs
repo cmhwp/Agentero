@@ -7,6 +7,7 @@
 
 pub mod analyze;
 pub mod catalog;
+pub mod code;
 pub mod discovery;
 pub mod import;
 pub mod ingest;

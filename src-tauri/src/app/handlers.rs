@@ -121,6 +121,7 @@ macro_rules! common_commands {
             crate::features::paper::catalog::commands::paper_page_counts,
             crate::features::paper::catalog::commands::paper_set_page_counts,
             crate::features::paper::catalog::commands::paper_reading_activity_batch,
+            crate::features::paper::code::paper_code_clone,
             crate::features::markdown::search::commands::vault_search,
             crate::core::usage::commands::activity_record_events,
             crate::core::usage::commands::usage_clear,

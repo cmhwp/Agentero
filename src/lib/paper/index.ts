@@ -49,11 +49,13 @@ export {
 export {
 	isPaperAssetPath,
 	isPaperAttachmentsDirName,
+	isPaperCodePath,
 	isPaperInternalDirName,
 	isPapersRoot,
 	isUnderPapers,
 	notesPathForPaper,
 	PAPER_ATTACHMENTS_DIR,
+	PAPER_CODE_DIR,
 	PAPER_INTERNAL_DIR_NAMES,
 } from "@/lib/paper/paths";
 export {

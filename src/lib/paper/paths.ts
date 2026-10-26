@@ -20,6 +20,9 @@ export function isUnderPapers(path: string | null): boolean {
 /** User-facing extras under a paper unit (`{paper}/attachments/…`). */
 export const PAPER_ATTACHMENTS_DIR = "attachments";
 
+/** Cloned code repositories under a paper unit (`{paper}/code/<repo>/…`). */
+export const PAPER_CODE_DIR = "code";
+
 /**
  * Directories that live inside a paper unit. They are never nested-paper
  * candidates, and writes under them do not change catalog rows.
@@ -29,6 +32,7 @@ export const PAPER_INTERNAL_DIR_NAMES = [
 	"assets",
 	"marks",
 	PAPER_ATTACHMENTS_DIR,
+	PAPER_CODE_DIR,
 ] as const;
 
 export function isPaperInternalDirName(
@@ -48,15 +52,23 @@ export function isPaperAttachmentsDirName(
 
 /**
  * True when path is inside a paper folder's internal dirs
- * (`<paper>/source|assets|marks|attachments/…`). Highlight/LaTeX/image/attachment
- * writes there never change catalog rows, so they must not trigger library refreshes.
+ * (`<paper>/source|assets|marks|attachments|code/…`). Highlight/LaTeX/image/
+ * attachment/code writes there never change catalog rows, so they must not
+ * trigger library refreshes.
  */
 export function isPaperAssetPath(path: string | null): boolean {
 	if (!path) return false;
 	const norm = normalizePath(path);
-	return /(^|\/)papers\/.+?\/(source|assets|marks|attachments)(\/|$)/i.test(
+	return /(^|\/)papers\/.+?\/(source|assets|marks|attachments|code)(\/|$)/i.test(
 		norm,
 	);
+}
+
+/** True when path is inside a cloned repository (`<paper>/code/<repo>/…`). */
+export function isPaperCodePath(path: string | null): boolean {
+	if (!path) return false;
+	const norm = normalizePath(path);
+	return /(^|\/)papers\/(?:[^/]+\/)+?code\/[^/]+(?:\/|$)/i.test(norm);
 }
 
 /** `<paperDir>/NOTES.md` — structured notes for the paper. */

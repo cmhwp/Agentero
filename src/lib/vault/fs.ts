@@ -19,7 +19,7 @@ export function isMarkdownPath(path: string): boolean {
 export function isTextOpenable(path: string): boolean {
 	return (
 		isMarkdownPath(path) ||
-		/\.(txt|json|bib|tex|html?|css|ts|tsx|js|jsx|rs|toml|yaml|yml|excalidraw)$/i.test(
+		/\.(txt|json|bib|tex|html?|css|scss|less|ts|tsx|js|jsx|mjs|cjs|rs|py|pyi|r|jl|cu|cuh|go|java|kt|swift|c|h|cc|cpp|hpp|rb|php|sh|bash|zsh|fish|toml|ini|cfg|xml|sql|graphql|yaml|yml|excalidraw)$/i.test(
 			path,
 		)
 	);

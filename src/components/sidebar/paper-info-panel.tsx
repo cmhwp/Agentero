@@ -1,10 +1,15 @@
 import {
 	BookOpen,
 	Calendar,
+	ChevronDown,
 	ChevronRight,
+	Code2,
+	Copy,
 	ExternalLink,
 	FileText,
+	FolderGit2,
 	Library,
+	LoaderCircle,
 	Pencil,
 	Tag,
 	Users,
@@ -28,6 +33,14 @@ import {
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { MathText } from "@/components/ui/math-text";
 import {
@@ -35,7 +48,11 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
+import { commands } from "@/lib/core/bindings";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
+import { callApi } from "@/lib/core/ipc";
+import { notifyError, notifySuccess } from "@/lib/core/notify";
+import { openExternalUrl } from "@/lib/core/open-external";
 import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { cn } from "@/lib/core/utils";
 import type { PaperMetadata } from "@/lib/paper";
@@ -53,7 +70,12 @@ import {
 import { venueInfo } from "@/lib/paper/venue-info";
 import { type TagColorId, tagSwatchStyle } from "@/lib/ui/tag-colors";
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
-import { getVaultPath } from "@/lib/vault/store";
+import {
+	getVaultPath,
+	refreshTree,
+	setTreeSelectedPath,
+} from "@/lib/vault/store";
+import { openPath } from "@/lib/workspace/navigation";
 
 type PaperInfoPanelProps = {
 	meta: PaperMetadata | null;
@@ -209,6 +231,142 @@ function ServiceLinkChip({
 				aria-hidden
 			/>
 		</a>
+	);
+}
+
+function isGithubRepo(value: string): boolean {
+	return /^(git@github\.com:|(https?:\/\/)?(www\.)?github\.com\/)/i.test(
+		value.trim(),
+	);
+}
+
+function CodeRepoChip({
+	paper,
+	repoUrl,
+	vaultPath,
+}: {
+	paper: PaperMetadata;
+	repoUrl: string;
+	vaultPath: string | null;
+}) {
+	const { t } = useTranslation("sidebar");
+	const [cloning, setCloning] = useState(false);
+	const github = isGithubRepo(repoUrl);
+	// SSH remotes are cloneable as-is; everything else gets an https:// href.
+	const href = repoUrl.trim().startsWith("git@") ? null : repoHref(repoUrl);
+	const label = github
+		? t("paperInfo.codeRepo")
+		: t("paperInfo.codeRepoGeneric");
+	const Icon = github ? SiGithub : Code2;
+
+	const cloneRepo = async () => {
+		if (!vaultPath || isRemoteVaultHandle(vaultPath) || !paper.path) {
+			notifyError(t("paperInfo.codeRepoDesktopOnly"));
+			return;
+		}
+		setCloning(true);
+		try {
+			const result = await callApi(
+				() =>
+					commands.paperCodeClone({
+						vaultPath,
+						paperPath: paper.path,
+						repoUrl: href ?? repoUrl.trim(),
+					}),
+				{ fallback: t("paperInfo.codeRepoCloneFailed") },
+			);
+			await refreshTree(vaultPath, { quiet: true });
+			if (result.openPath) openPath(result.openPath);
+			else setTreeSelectedPath(result.codePath);
+			notifySuccess(
+				result.alreadyPresent
+					? t("paperInfo.codeRepoAlreadyCloned")
+					: t("paperInfo.codeRepoCloned"),
+				{
+					description: result.openPath
+						? t("paperInfo.codeRepoPath", { path: result.openPath })
+						: t("paperInfo.codeRepoSavedTo", { path: result.codePath }),
+				},
+			);
+		} catch (error) {
+			notifyError(
+				error instanceof Error
+					? error.message
+					: t("paperInfo.codeRepoCloneFailed"),
+			);
+		} finally {
+			setCloning(false);
+		}
+	};
+
+	return (
+		<DropdownMenu>
+			<DropdownMenuTrigger asChild>
+				<button
+					type="button"
+					aria-label={label}
+					title={repoUrl}
+					className={cn(
+						"inline-flex h-6 min-w-0 flex-1 items-center justify-center gap-1 rounded-md border bg-background px-1.5",
+						"text-caption leading-none text-muted-foreground transition-colors",
+						"hover:bg-muted hover:text-foreground",
+						"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+					)}
+				>
+					{cloning ? (
+						<LoaderCircle
+							className="size-3.5 shrink-0 animate-spin"
+							aria-hidden
+						/>
+					) : (
+						<Icon className="size-3.5 shrink-0" aria-hidden />
+					)}
+					<span className="min-w-0 truncate @max-[18rem]/paper-links:hidden">
+						{label}
+					</span>
+					<ChevronDown
+						className="size-2.5 shrink-0 opacity-70 @max-[18rem]/paper-links:hidden"
+						aria-hidden
+					/>
+				</button>
+			</DropdownMenuTrigger>
+			<DropdownMenuContent align="start" className="w-64">
+				<DropdownMenuLabel className="truncate font-normal" title={repoUrl}>
+					{repoUrl}
+				</DropdownMenuLabel>
+				<DropdownMenuSeparator />
+				{href ? (
+					<DropdownMenuItem onSelect={() => openExternalUrl(href)}>
+						<ExternalLink aria-hidden />
+						{t("paperInfo.codeRepoOpenExternal")}
+					</DropdownMenuItem>
+				) : null}
+				<DropdownMenuItem
+					onSelect={() =>
+						void copyTextToClipboard(href ?? repoUrl.trim(), {
+							successMessage: t("paperInfo.copied", { label }),
+							errorMessage: t("paperInfo.copyFailed"),
+						})
+					}
+				>
+					<Copy aria-hidden />
+					{t("paperInfo.codeRepoCopy")}
+				</DropdownMenuItem>
+				<DropdownMenuItem
+					disabled={cloning || !github}
+					onSelect={() => void cloneRepo()}
+				>
+					<FolderGit2 aria-hidden />
+					{cloning
+						? t("paperInfo.codeRepoCloning")
+						: t("paperInfo.codeRepoClone")}
+				</DropdownMenuItem>
+				<DropdownMenuItem onSelect={() => setEditMetaDraft(paper)}>
+					<Pencil aria-hidden />
+					{t("paperInfo.codeRepoEdit")}
+				</DropdownMenuItem>
+			</DropdownMenuContent>
+		</DropdownMenu>
 	);
 }
 
@@ -710,12 +868,10 @@ export function PaperInfoPanel({
 										/>
 									) : null}
 									{codeRepo ? (
-										<ServiceLinkChip
-											href={repoHref(codeRepo)}
-											label={t("paperInfo.codeRepo")}
-											icon={
-												<SiGithub className="size-3.5 shrink-0" aria-hidden />
-											}
+										<CodeRepoChip
+											paper={meta}
+											repoUrl={codeRepo}
+											vaultPath={vaultPath}
 										/>
 									) : null}
 									{openreviewUrl ? (

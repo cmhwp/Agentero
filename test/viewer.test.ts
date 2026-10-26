@@ -36,7 +36,7 @@ describe("viewer path helpers", () => {
 		expect(preferredModeForPath(null)).toBe("markdown");
 	});
 
-	it("falls back to the text editor only outside papers/", () => {
+	it("falls back to the text editor outside papers and for cloned code", () => {
 		expect(preferredModeForPath("/vault/notes/config.toml")).toBe("text");
 		expect(preferredModeForPath("/vault/README")).toBe("text");
 		expect(preferredModeForPath("/vault/notes/data.json")).toBe("text");
@@ -47,6 +47,15 @@ describe("viewer path helpers", () => {
 		expect(preferredModeForPath("/vault/papers/2401.0001/data/misc.dat")).toBe(
 			"markdown",
 		);
+		expect(
+			preferredModeForPath("/vault/papers/2401.0001/code/example/README.md"),
+		).toBe("text");
+		expect(
+			preferredModeForPath("/vault/papers/2401.0001/code/example/src/main.go"),
+		).toBe("text");
+		expect(
+			preferredModeForPath("/vault/papers/2401.0001/code/example/docs/fig.png"),
+		).toBe("image");
 		// Dedicated viewers still win under papers/.
 		expect(preferredModeForPath("/vault/papers/2401.0001/main.pdf")).toBe(
 			"pdf",

@@ -379,6 +379,13 @@ export const commands = {
 	 */
 	paperReadingActivityBatch: (args: PaperReadingActivityBatchArgs) => __TAURI_INVOKE<ApiResult<{ [key in string]: ReadingActivityPoint[] }>>("paper_reading_activity_batch", { args }),
 	/**
+	 *  Clone a paper's GitHub repository into `papers/<paper>/code/<repo>`.
+	 *  Local Vaults only; platforms without `git` on PATH get `git_unavailable`.
+	 *  It never overwrites an existing checkout and disables Git's interactive
+	 *  credential prompts so a GUI invocation cannot hang.
+	 */
+	paperCodeClone: (args: PaperCodeCloneArgs) => __TAURI_INVOKE<ApiResult<PaperCodeCloneResult>>("paper_code_clone", { args }),
+	/**
 	 *  Full-text search over the Vault's Markdown files. See `services::search`.
 	 * 
 	 *  Async + `run_blocking`: the walk reads every Markdown file, which must not
@@ -3905,6 +3912,22 @@ export type PaperAssetsStatus = {
 	pdf: boolean,
 	tex: boolean,
 	paperMd: boolean,
+};
+
+export type PaperCodeCloneArgs = {
+	vaultPath: string,
+	/**  Vault-relative paper folder, e.g. `papers/1706.03762`. */
+	paperPath: string,
+	repoUrl: string,
+};
+
+export type PaperCodeCloneResult = {
+	/**  Absolute path of the local repository checkout. */
+	codePath: string,
+	/**  A text entry suitable for opening in the in-app code viewer. */
+	openPath: string | null,
+	/**  True when the checkout already existed and was reused. */
+	alreadyPresent: boolean,
 };
 
 /**  Uniform result shape for every entry (camelCase matches the frontend). */

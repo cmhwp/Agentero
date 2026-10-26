@@ -1,4 +1,4 @@
-import { isUnderPapers } from "@/lib/paper/paths";
+import { isPaperCodePath, isUnderPapers } from "@/lib/paper/paths";
 import { isRemoteArxivPath } from "@/lib/paper/remote-paper";
 import { isMarkdownPath } from "@/lib/vault/fs";
 
@@ -227,9 +227,14 @@ export function isViewerPath(path: string): boolean {
  */
 export function preferredModeForPath(path: string | null): CenterViewMode {
 	if (!path) return "markdown";
+	// Cloned repos (`<paper>/code/<repo>/…`) are plain source trees: their
+	// README must not open as paper notes, but PDFs/images keep their viewers.
+	const inCode = isPaperCodePath(path);
 	for (const entry of VIEWER_MODE_TABLE) {
+		if (inCode && entry.mode === "markdown") continue;
 		if (entry.matchesPath?.(path)) return entry.mode;
 	}
+	if (inCode) return "text";
 	if (isUnderPapers(path)) return "markdown";
 	return "text";
 }
